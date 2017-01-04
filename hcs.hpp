@@ -48,6 +48,14 @@
  *	 Again: The LSBs (Least Significant Bit) are always the ones for the highest level (from level part).
  *	 This guarantees shortest linear distance in memory for neighbors and is compatible with morton-codes.
  *
+ *	 What does "unscaled" mean:
+ *	 Methods like getPosition() or createFromPosition() use the scalings provided in center + scales to
+ *	 compute the H coordinate for a certain level. Unscaled means they operate on integers representing the
+ *	 whole level. A level-8 coordinate in 2D has 2^8 x 2^8 possible locations, so an unscaled level-8 coordinate
+ *	 would be in _unscaled_ Cartesian space from X= 0 -> 255 and Y=0 -> 255, while a level-9 has 2^9,
+ *	 so X= 0 -> 511 and Y= 0 -> 511. An unscaled coordinate has a completely different "true" location than the
+ *	 same coordinate at a different level!
+ *
  */
 
 #pragma once
@@ -233,12 +241,14 @@ public:
 		return (coord >> HCS_LEVEL_BIT);
 	}
 
+	// Set the level of a coordinate
 	static void SetLevel(coord_t &coord, level_t level) {
 		//assert(level <= max_level);
 		coord &= ~(coord_t)0 >> (HCS_COORD_BITS - HCS_LEVEL_BIT);		// Zero level bits
 		coord |= ((coord_t)level << HCS_LEVEL_BIT);
 	}
 
+	// Return the closest coordinate at the next lower level.
 	static coord_t ReduceLevel(coord_t coord) {
 		if (IsBoundary(coord))
 			return coord;
@@ -251,7 +261,7 @@ public:
 		return coord;
 	}
 
-	// Increases the level of coord, setting the highest level to new_level_part (must be between 0 and part_mask)
+	// Increases the level of coord, setting the highest level to a new sub-coordinate (must be between 0 and part_mask)
 	static coord_t IncreaseLevel(coord_t coord, uint8_t new_level_coord) {
 		if (IsBoundary(coord))
 			return coord;
@@ -271,13 +281,7 @@ public:
 
 	pos_t getPosition(coord_t coord) {
 		pos_t result = center;
-		if (IsBoundary(coord) || coord == 0)
-			return result;
-		unscaled_t unscaled = getUnscaled(coord);
-		level_t level = GetLevel(coord);
-		data_t scale_divisor = 1 / data_t(1 << level);
-		for (uint8_t dim = 0; dim < dimensions; dim++)
-			result[dim] = scales[dim] * 2 * ((data_t)unscaled[dim] * scale_divisor - 0.5 + 0.5 * scale_divisor) + center[dim];
+		getPosition(coord, result);
 		return result;
 	}
 
