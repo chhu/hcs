@@ -1,9 +1,5 @@
 # The H-coordinate system
-This include / template library is an extended, multi-dimensional recursive coordinate system, similar to the Z order space-filling curve or Morton-codes. It is more than a Z curve as it captures the recursive nature best visualized from the H fractal. Each recursive refinement is called level. The coordinate storage type canbe changed here and is intentionally not a template parameter. Also the part that stores the level can be configured (HCS_LEVEL_BIT) but you should know what you are doing.
-
-The default coordinate type is unsigned 64bit, allowing a 3D recursion depth of 19 iterations (levels), resulting in a closest distance of 1/2^19 for a scale of one (1x1x1 box). The most significant bits determine the (iteration-) level, _the_ most significant bit marks a boundary coord. The lower bits describe sub-coordinates, every D (dimensions) bits. The sub-coordinate of the highest level is always at the least significant bits.
-
-Because the H fractal best illustrates this, its called the H-coordinate-system (https://en.wikipedia.org/wiki/H_tree):
+This C++11 include / template library provides a slim, multi-dimensional recursive coordinate- and storage-system, similar to the Z order space-filling curve or Morton-codes. It is more than a Z curve as it inherits a recursive nature, best visualized from the H fractal. Each recursive refinement is called a _level_ and leads to smaller "H"s. Their path along this hierarchy is encoded as sub-coordinates. Although the resulting coordinates are identical to [Morton codes](https://en.wikipedia.org/wiki/Z-order_curve), the H tree best illustrates the recursive nature of arbitrary-level Morton codes, therefore calling it the H-coordinate-system (https://en.wikipedia.org/wiki/H_tree):
 
 
          6|        |7
@@ -16,7 +12,11 @@ Because the H fractal best illustrates this, its called the H-coordinate-system 
        |        |
       0|        |1
 
-   A single coordinate for a level (3-bit, 0-7 values for 3D) is as follows: LSB is X+/-, next bit Y+/-, next bit Z+/-
+The coordinate storage type can be configured and is intentionally not a template parameter. Also the part of the coordinate that stores the level information can be configured (HCS_LEVEL_BIT) but you should know what you are doing.
+
+The default coordinate (coord) type is unsigned 64bit, allowing a 3D recursion depth of 19 iterations (levels), resulting in a closest distance of 1/2^19 for a scale of one (1x1x1 box). The most significant bits determine the level, _the_ most significant bit marks a boundary coord. The lower bits describe sub-coordinates, every D (dimensions) bits. The sub-coordinate of the highest level is always at the least significant bits.
+
+A single sub-coordinate for a level (3-bit for 3D, values 0-7) encodes as: LSB is X+/- from origin (center of a H), next bit Y+/-, next bit Z+/-,...
    Example:
    
    
