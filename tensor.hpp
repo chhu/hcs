@@ -271,5 +271,3 @@ int dmat_solve(int n, int rhs_num, T a[]) {
 }
 
 
-
-#endif /* TENSOR_HPP_ */
