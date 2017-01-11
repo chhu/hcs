@@ -31,7 +31,7 @@ private:
  public:
 	class iterator; // The public iterator class
 
-	Field(char symbol, HCSTYPE* hcs_) : symbol(symbol), _current(NULL), hcs(hcs_), bracket_behavior(BR_THROW) {
+	Field(char symbol, HCSTYPE hcs_) : symbol(symbol), _current(NULL), hcs(hcs_), bracket_behavior(BR_THROW) {
 		coeff_up_count = coeff_down_count = 0;
 		// Create single-value center bucket, the only coordinate that always exists. [0]
 		data[0] = new Bucket(0, 0);
@@ -40,15 +40,26 @@ private:
 			bf = nullptr;
 	}
 
+	Field(char symbol) : Field(symbol, HCSTYPE()) {}
+	Field(HCSTYPE hcs) : Field('x', hcs) {}
+	Field() : Field('x', HCSTYPE()) {}
+
+
 	// The copy constructor, to make quick copies of the field and its structure
 	// Field<??> a = b; Or Field<??> a(b);
 	Field(const Field<DTYPE, HCSTYPE> &f) {
-		//cout << "FCOPY\n"; // debug hint, this is an expensive op and can happen when you least expect it
-		*this = f;  // private call to =, copies everything.
+		cout << "FCOPY\n"; // debug hint, this is an expensive op and can happen when you least expect it
+		this->symbol = f.symbol;
+		this->hcs = f.hcs;
+		this->bracket_behavior = f.bracket_behavior;
+		this->data = f.data;
+		this->boundary = f.boundary;
+		coeff_up_count = coeff_down_count = 0;
 		// The buckets are pointers, so in order to not get a reference to the values, we need to copy separately.
 		for (auto & bucket : data) {
 			bucket.second = new Bucket(*(bucket.second)); // Calls implicit copy constructor of Bucket.
 		}
+		_current = NULL;
 	}
 
 	// Because we "new"d Buckets, we need to release them.
@@ -62,7 +73,7 @@ private:
 	 friend class Field;
 
 	// The H-coordinate system to operate on
-	HCSTYPE*	hcs;
+	HCSTYPE	hcs;
 
 	// The boundary functions
 	array<function<DTYPE(coord_t origin)>, 64> boundary; // max 32
@@ -88,11 +99,6 @@ private:
 	//  The type to store a list of coords and their coefficients.
 	//  It is a map instead of a vector because of unique coord elimination.
 	typedef map<coord_t, data_t> coeff_map_t;
-
-	// This line prevents the use of Field a, b; a=b;
-	// Instead use copy constructor: Field a = b;
-	// We could use delete, but then we cannot use it in our own copy constructor.
-	Field &operator=(const Field&) = default;
 
 
  private:
@@ -153,7 +159,7 @@ private:
 		if (this->_current != NULL && coord >= _current->start && coord <= _current->end) {
 			return true;
 		}
-		if (hcs->IsBoundary(coord))
+		if (hcs.IsBoundary(coord))
 			return false;
 		map_iter_t result = data.lower_bound(coord);
 		if (result == data.end() || result->second->end < coord)
@@ -173,16 +179,19 @@ private:
 	// if it is not TLC, return value anyway. To retrieve proper values from non-TLC
 	// call propagate() first
 	DTYPE get(coord_t coord) {
-		DTYPE result = 0;
 		if (exists(coord)) {
 			return _current->get(coord);
 		}
+		DTYPE result = 0;
+		get(coord, result, true);
+		return result;
+
 		coeff_map_t coeffs;
 		getCoeffs(coord, coeffs, true);
 		for (auto coeff : coeffs) {
 			coord_t c = coeff.first;
-			if (hcs->IsBoundary(c)) {
-				uint8_t boundary_index = hcs->GetBoundaryDirection(c);
+			if (hcs.IsBoundary(c)) {
+				uint8_t boundary_index = hcs.GetBoundaryDirection(c);
 				if (boundary[boundary_index] != nullptr) {
 					result += boundary[boundary_index](c) * coeff.second; // Ask the provided boundary callback
 				}	// If no BC provided, assume zero, do nothing
@@ -191,6 +200,95 @@ private:
 			}
 		}
 		return result;
+	}
+
+	map<coord_t, DTYPE> upscale_cache;
+	void get(coord_t coord, DTYPE& result, bool use_non_top = true) {
+		if (hcs.IsBoundary(coord)) {
+			uint8_t boundary_index = hcs.GetBoundaryDirection(coord);
+			if (boundary[boundary_index] != nullptr)
+				result = boundary[boundary_index](coord);
+			else
+				result = 0;
+			return;
+
+		}
+		if (exists(coord)) {
+			if (use_non_top || isTop(coord)) {
+				result += _current->get(coord);
+				return;
+			} else {
+				for (uint16_t direction = 0; direction < hcs.parts; direction++) {
+					coeff_up_count++;
+					DTYPE partial = 0;
+					//getCoeffs(hcs.IncreaseLevel(coord, direction), partial, use_non_top, recursion + 1);
+					get(hcs.IncreaseLevel(coord, direction), partial, use_non_top);
+					partial /= (data_t)hcs.parts;
+					result += partial;
+				}
+			}
+		} else {
+
+			uint16_t high_part = hcs.extract(coord, 0);
+			coord_t origin = hcs.ReduceLevel(coord);
+
+			array<bool, 64> boundary_quench;
+
+			for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
+				bool plus = ((high_part >> j) & 1);
+				boundary_quench[j] = hcs.IsBoundary(hcs.getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
+			}
+
+
+			for (uint8_t i = 0; i <= hcs.part_mask; i++) {
+				coord_t current = origin;
+
+				data_t weight = 1;
+
+				for (uint8_t j = 0; j < hcs.GetDimensions(); j++)
+					weight *= boundary_quench[j] ? 0.5 : (((i >> j) & 1) ? 0.25 : 0.75);
+
+				set<coord_t> boundary_shares;
+
+				for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
+					if (((i >> j) & 1) == 0)
+						continue;
+
+					coord_t prev_current = current;
+					current = hcs.getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
+					if (hcs.IsBoundary(current)) {
+						boundary_shares.insert(current);
+						current = prev_current;
+					}
+				}
+
+
+				// get coeffs for current
+
+				if (!boundary_shares.empty()) {
+					for (auto b_coord : boundary_shares) {
+						uint8_t boundary_index = hcs.GetBoundaryDirection(b_coord);
+						if (boundary[boundary_index] != nullptr)
+							result += boundary[boundary_index](b_coord) * (weight / (data_t)boundary_shares.size()); // Ask the provided boundary callback
+					}
+					continue;
+				}
+				if (exists(current)) {
+					result += _current->get(current) * weight;
+				} else {
+					auto it = upscale_cache.find(current);
+					if (it != upscale_cache.end()) {
+						result += it->second * weight;
+						continue;
+					}
+					DTYPE partial = 0;
+					coeff_down_count++;
+					get(current, partial, use_non_top);
+					upscale_cache[current] = partial;
+					result += partial * weight;
+				}
+			}
+		}
 
 	}
 
@@ -209,7 +307,7 @@ private:
 		level_t highest = getHighestLevel();
 
 		for (auto& entry : data) {
-			level_t current_level = hcs->GetLevel(entry.first);
+			level_t current_level = hcs.GetLevel(entry.first);
 			if (current_level < highest) {
 				// We have reached the next lower level. Write cache.
 				for (auto& centry : lower_level_cache)
@@ -219,14 +317,14 @@ private:
 			}
 			if (highest == 0) // 0-Bucket has only one coord that should have been filled.
 				break;
-			// A Bucket must have a multiple of hcs->parts
+			// A Bucket must have a multiple of hcs.parts
 			Bucket *b = entry.second;
-			for (coord_t c = b->start; c <= b->end; c += hcs->parts) {
+			for (coord_t c = b->start; c <= b->end; c += hcs.parts) {
 				DTYPE total = 0;
-				for (int j = 0; j < hcs->parts; j++)
+				for (int j = 0; j < hcs.parts; j++)
 					total += b->get(c + j);
-				total /= hcs->parts;
-				lower_level_cache.push_back(make_tuple(hcs->ReduceLevel(c), total));
+				total /= hcs.parts;
+				lower_level_cache.push_back(make_tuple(hcs.ReduceLevel(c), total));
 			}
 		}
 
@@ -241,12 +339,12 @@ private:
 	// to set non-top values to their averaged versions from top-level values.
 	// never use recursion parameter, its purely internal to protect the stack.
 	void getCoeffs(const coord_t coord, coeff_map_t &coeffs, bool use_non_top = true, int recursion = 0) {
-		if (hcs->IsBoundary(coord)) {
+		if (hcs.IsBoundary(coord)) {
 			coeffs[coord] = 1.;
 			return;
 		}
-		if (recursion > hcs->max_level) {
-			cout << "RECURSION LIMIT REACHED (" << hcs->max_level << ") coord: " << hcs->toString(coord) << endl;
+		if (recursion > hcs.max_level) {
+			cout << "RECURSION LIMIT REACHED (" << hcs.max_level << ") coord: " << hcs.toString(coord) << endl;
 			printBucketInfo();
 			exit(1);
 		}
@@ -255,13 +353,13 @@ private:
 				coeffs[coord] = 1.;
 				return;
 			} else {
-				for (uint16_t direction = 0; direction < hcs->parts; direction++) {
+				for (uint16_t direction = 0; direction < hcs.parts; direction++) {
 					coeff_up_count++;
 					coeff_map_t partial;
-					getCoeffs(hcs->IncreaseLevel(coord, direction), partial, use_non_top, recursion + 1);
+					getCoeffs(hcs.IncreaseLevel(coord, direction), partial, use_non_top, recursion + 1);
 					for (auto &coeff : partial)
-						coeff.second /= hcs->parts;
-						//std::get<1>(coeff) /= hcs->parts;
+						coeff.second /= hcs.parts;
+						//std::get<1>(coeff) /= hcs.parts;
 					coeffs.insert(partial.begin(), partial.end());
 				}
 			}
@@ -309,56 +407,57 @@ private:
 			//        1  1  1  =  0.25³         = 0.0156
 			//						TOTAL	    = 1 :)
 			// This principle is universal for all dimensions!
-			uint16_t high_part = hcs->extract(coord, 0); 	//
-			coord_t origin = hcs->ReduceLevel(coord);
-			//hcs->getNeighbors(origin, ne);
+			uint16_t high_part = hcs.extract(coord, 0); 	//
+			coord_t origin = hcs.ReduceLevel(coord);
+			//hcs.getNeighbors(origin, ne);
 			array<bool, 64> boundary_quench;
 
-			for (uint8_t j = 0; j < hcs->GetDimensions(); j++) {
+
+			for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
 				bool plus = ((high_part >> j) & 1);
-				boundary_quench[j] = hcs->IsBoundary(hcs->getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
+				boundary_quench[j] = hcs.IsBoundary(hcs.getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
 			}
 
 
-			for (uint8_t i = 0; i <= hcs->part_mask; i++) {
+			array<tuple<coord_t, data_t, int>, 64> collection;
+			for (uint8_t i = 0; i <= hcs.part_mask; i++) {
 				coord_t current = origin;
+				std::get<2>(collection[i]) = 0;
+				int boundaries_involved = 0;
+				vector<coord_t> bc_collector;
 
-				set<coord_t> boundary_shares;
+				data_t weight = 1;
 
-				for (uint8_t j = 0; j < hcs->GetDimensions(); j++) {
+				for (uint8_t j = 0; j < hcs.GetDimensions(); j++)
+					weight *= boundary_quench[j] ? 0.5 : (((i >> j) & 1) ? 0.25 : 0.75);
+
+
+				for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
 					if (((i >> j) & 1) == 0)
 						continue;
 
 					coord_t prev_current = current;
-					current = hcs->getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
-					if (hcs->IsBoundary(current)) {
-						boundary_shares.insert(current);
+					current = hcs.getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
+					if (hcs.IsBoundary(current)) {
+						bc_collector.push_back(current);
 						current = prev_current;
 					}
 				}
 
-				data_t weight = 1;
+				if (!bc_collector.empty()) {
+					for (auto bcc : bc_collector)
+						coeffs[bcc] += weight / bc_collector.size();
+					continue;
+				}
 
-				for (uint8_t j = 0; j < hcs->GetDimensions(); j++)
-					weight *= boundary_quench[j] ? 0.5 : (((i >> j) & 1) ? 0.25 : 0.75);
-
-				// get coeffs for current
-
-				if (!boundary_shares.empty()) {
-					// The calculated weight needs to be split to all boundaries that
-					// the neighbor walk might have hit.
-					for (auto b_coord : boundary_shares)
-						coeffs[b_coord] += weight / boundary_shares.size();
+				if (exists(current)) {
+					coeffs[current] += weight;
 				} else {
-					if (exists(current)) {
-						coeffs[current] += weight;
-					} else {
-						coeff_map_t partial;
-						coeff_down_count++;
-						getCoeffs(current, partial, use_non_top, recursion + 1);
-						for (auto &coeff : partial)
-							coeffs[coeff.first] += coeff.second * weight;
-					}
+					coeff_map_t partial;
+					coeff_down_count++;
+					getCoeffs(current, partial, use_non_top, recursion + 1);
+					for (auto &coeff : partial)
+						coeffs[coeff.first] += coeff.second * weight;
 				}
 			}
 		}
@@ -373,9 +472,9 @@ private:
 		data[0]->setTop(0, false);
 		for (level_t l = 1; l <= level; l++) {
 			coord_t level_start = 0;
-			coord_t level_end = ((coord_t)1 << (l * hcs->GetDimensions())) - 1;
-			hcs->SetLevel(level_start, l);
-			hcs->SetLevel(level_end, l);
+			coord_t level_end = ((coord_t)1 << (l * hcs.GetDimensions())) - 1;
+			hcs.SetLevel(level_start, l);
+			hcs.SetLevel(level_end, l);
 			Bucket* bucket = new Bucket(level_start, level_end);
 			data[level_start] = bucket;
 			fill(bucket->top.begin(), bucket->top.end(), l == level);
@@ -388,8 +487,8 @@ private:
 		if (!exists(coord))
 			throw range_error("refineFrom() Trying to refine from a coord that does not exist!");
 		Bucket* coord_bucket = _current;  // bucket that holds coord
-		coord_t lower_corner = hcs->IncreaseLevel(coord, 0);
-		coord_t upper_corner = hcs->IncreaseLevel(coord, hcs->part_mask);
+		coord_t lower_corner = hcs.IncreaseLevel(coord, 0);
+		coord_t upper_corner = hcs.IncreaseLevel(coord, hcs.part_mask);
 		if (exists(lower_corner))
 			return;	// ? nothing to do...
 		Bucket* bucket = new Bucket(lower_corner, upper_corner);
@@ -408,13 +507,13 @@ private:
 		// Traverse down until a coord exists (worst-case is 0 or center)
 		int i = 0;
 		while (!exists(existing)) {
-			existing = hcs->ReduceLevel(existing);
+			existing = hcs.ReduceLevel(existing);
 			i++;
 		}
 		// Refine upwards
 		while (i-- > 0) {
 			refineFrom(existing);
-			existing = hcs->IncreaseLevel(existing, hcs->extract(coord, i));
+			existing = hcs.IncreaseLevel(existing, hcs.extract(coord, i));
 		}
 	}
 
@@ -428,19 +527,19 @@ private:
 
 		Bucket* coord_bucket = _current;
 
-		coord_t first_up = hcs->IncreaseLevel(coord, 0);
+		coord_t first_up = hcs.IncreaseLevel(coord, 0);
 
 		if (!exists(first_up))
 			throw range_error("Inconsistency detected!");
 
 		bool part_range_top = true;
-		for (int i = 0; i < hcs->parts; i++)
+		for (int i = 0; i < hcs.parts; i++)
 			part_range_top &= _current->isTop(first_up + i);
 		if (part_range_top) {
 			removeCoords(first_up);
 			coord_bucket->setTop(coord, true);
 		} else {
-			for (int8_t i = hcs->part_mask; i >= 0; i--) // reverse coarsening leads to tail-shrinks instead of expensive head-shrinks.
+			for (int8_t i = hcs.part_mask; i >= 0; i--) // reverse coarsening leads to tail-shrinks instead of expensive head-shrinks.
 				coarse(first_up + i);
 			coarse(coord);
 		}
@@ -473,7 +572,7 @@ private:
 
 	// Return highest stored coord-level
 	level_t getHighestLevel() {
-		return hcs->GetLevel(data.begin()->second->start); // map's sort order is "greater", so highest-level bucket is first.
+		return hcs.GetLevel(data.begin()->second->start); // map's sort order is "greater", so highest-level bucket is first.
 	}
 
 	// Iterator methods & class
@@ -488,40 +587,95 @@ private:
     // Arithmetic Ops, preserving structure of current refinement.
     // Exampe: a * b keeps sparse structure of a and multiplies with (possible) interpolates from b
     // while b * a keeps sparse structure of b. A generic merge() can specify merged structure and arbitrary ops.
-    const Field<DTYPE, HCSTYPE> operator+(Field<DTYPE, HCSTYPE> &f) const {
+
+    // Assignment operator requires equal structure, dirty-check with data.size()
+	Field &operator=(const Field& f){
+		cout << "XCOPY\n";
+		assert(data.size() == f.data.size());
+		auto iter_this = data.begin();
+		auto iter_f = f.data.begin();
+		while (iter_this != data.end()) {
+			Bucket *b_this = iter_this->second;
+			Bucket *b_f = iter_f->second;
+			b_this->data = b_f->data;
+			++iter_this;
+			++iter_f;
+		}
+		_current = NULL;
+		return *this;
+	};
+
+    Field<DTYPE, HCSTYPE>& operator=(DTYPE f) {
+    	for (auto e : *this)
+    		e.second = f;
+    	return *this;
+    }
+    Field<DTYPE, HCSTYPE> operator+(Field<DTYPE, HCSTYPE> &f)  {
     	Field<DTYPE, HCSTYPE> result = *this;
     	result += f;
 		return result;
 	} // add
 
     Field<DTYPE, HCSTYPE>& operator+=(Field<DTYPE, HCSTYPE>& f) {
+    	f.upscale_cache.clear();
     	for (auto e : *this)
     		e.second += f.get(e.first);
-		return *this;
+    	f.upscale_cache.clear();
+    	return *this;
 	} // add
 
-    const Field<DTYPE, HCSTYPE> operator-(Field<DTYPE, HCSTYPE> &f) const {
+    Field<DTYPE, HCSTYPE> operator+(DTYPE f) {
+    	Field<DTYPE, HCSTYPE> result = *this;
+    	result += f;
+		return result;
+	} // add
+
+    Field<DTYPE, HCSTYPE>& operator+=(DTYPE f) {
+    	for (auto e : *this)
+    		e.second += f;
+    	return *this;
+	} // add
+
+    Field<DTYPE, HCSTYPE> operator-(Field<DTYPE, HCSTYPE> &f)  {
     	Field<DTYPE, HCSTYPE> result = *this;
     	result -= f;
 		return result;
 	} // add
 
     Field<DTYPE, HCSTYPE>& operator-=(Field<DTYPE, HCSTYPE>& f) {
+    	f.upscale_cache.clear();
     	for (auto e : *this)
     		e.second -= f.get(e.first);
-		return *this;
+    	f.upscale_cache.clear();
+    	return *this;
 	} // add
 
-    const Field<DTYPE, HCSTYPE> operator*(Field<DTYPE, HCSTYPE> &f) const {
+    Field<DTYPE, HCSTYPE> operator*(Field<DTYPE, HCSTYPE> &f)  {
     	Field<DTYPE, HCSTYPE> result = *this;
     	result *= f;
 		return result;
 	} // add
 
     Field<DTYPE, HCSTYPE>& operator*=(Field<DTYPE, HCSTYPE>& f) {
-    	for (auto e : *this)
+    	f.upscale_cache.clear();
+    	for (auto e : *this) {
     		e.second *= f.get(e.first);
-		return *this;
+    	}
+    	f.upscale_cache.clear();
+    	return *this;
+	} // add
+
+    Field<DTYPE, HCSTYPE> operator*(DTYPE f) {
+    	Field<DTYPE, HCSTYPE> result = *this;
+    	result *= f;
+		return result;
+	} // add
+
+    Field<DTYPE, HCSTYPE>& operator*=(DTYPE f) {
+    	for (auto e : *this) {
+    		e.second *= f;
+    	}
+    	return *this;
 	} // add
 
     const Field<DTYPE, HCSTYPE> operator/(Field<DTYPE, HCSTYPE> &f) const {
@@ -531,9 +685,12 @@ private:
 	} // add
 
     Field<DTYPE, HCSTYPE>& operator/=(Field<DTYPE, HCSTYPE>& f) {
+    	f.upscale_cache.clear();
     	for (auto e : *this)
     		e.second /= f.get(e.first);
-		return *this;
+    	f.upscale_cache.clear();
+
+    	return *this;
 	} // add
 
     // Converts a Field with another DTYPE according to convert function.
@@ -593,7 +750,7 @@ private:
 	    		while (map_iter != field->data.end()) {
 	    			++map_iter;
 		    		coord_t start = map_iter->first;
-		    		if (field->hcs->GetLevel(start) == only_level)
+		    		if (field->hcs.GetLevel(start) == only_level)
 		    			break;
 	    		}
 	    	}
@@ -649,7 +806,7 @@ private:
 	    		}
 	    		bucket = map_iter->second;
 	    		bucket_index = 0;
-	    		if (only_level >= 0 && field->hcs->GetLevel(bucket->start) < only_level) {
+	    		if (only_level >= 0 && field->hcs.GetLevel(bucket->start) < only_level) {
 	    			at_end = true;
 	    			return;
 	    		}
@@ -699,15 +856,15 @@ private:
 
 		for (auto b : data) {
 			size_t n_top = count(b.second->top.begin(), b.second->top.end(), true);
-			cout << "Bucket: N = " << b.second->data.size() << " N_top = " << n_top << " Start: " << hcs->toString(b.second->start) << " End: " << hcs->toString(b.second->end) <<endl;
+			cout << "Bucket: N = " << b.second->data.size() << " N_top = " << n_top << " Start: " << hcs.toString(b.second->start) << " End: " << hcs.toString(b.second->end) <<endl;
 		}
 	}
   private:
 
 	// unconditionally remove without checking hierarchy, start until start + part_mask get thrown away.
 	void removeCoords(coord_t start) {
-		start = start & (~hcs->part_mask); // make sure first sub-coord is zero
-		coord_t end = start | hcs->part_mask;
+		start = start & (~hcs.part_mask); // make sure first sub-coord is zero
+		coord_t end = start | hcs.part_mask;
 
 		map_iter_t result = data.lower_bound(start);
 
@@ -768,7 +925,7 @@ private:
 
 		coord_t			start, end;
 		vector<DTYPE> 	data;
-		vector<bool>	top;
+		vector<char>	top;
 
 		size_t index(coord_t coord) {
 			assert(coord >= start && coord <= end);

@@ -7,8 +7,8 @@ int main(int argc, char **argv) {
 
 	H2 h2;  // The 2D coordinate system
 
-	ScalarField2 x2('x', &h2);
-	VectorField2 v2('v', &h2);
+	ScalarField2 x2;
+	VectorField2 v2;
 
 	v2.createEntireLevel(8);  // 2D box with 256x256 vectors
 

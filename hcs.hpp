@@ -290,9 +290,9 @@ public:
 			return;
 		unscaled_t unscaled = getUnscaled(coord);
 		level_t level = GetLevel(coord);
-		data_t scale_divisor = data_t(1 << level);
+		data_t scale_divisor = 1./ data_t(1 << level);
 		for (uint8_t dim = 0; dim < dimensions; dim++)
-			result[dim] = scales[dim] * 2 * ((data_t)unscaled[dim] / scale_divisor - 0.5) + center[dim];
+			result[dim] = scales[dim] * ((data_t)unscaled[dim] * scale_divisor * 2 + scale_divisor) - center[dim] + scales[dim];
 	}
 
 	// Returns the coordinate closest to the provided Cart. coordinates for specific level

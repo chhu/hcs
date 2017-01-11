@@ -6,10 +6,10 @@ int main(int argc, char **argv) {
 	// Test suite
 	H3 h3;
 
-	VectorField3 v1('v', &h3);
-	VectorField3 v2('v', &h3);
-	ScalarField3 x('u', &h3);
-	cout << sizeof(Vec4) << endl;
+	VectorField3 v1;
+	VectorField3 v2;
+	ScalarField3 x;
+	cout << "3D-test\n" << endl;
 
 	v1.createEntireLevel(8);
 	v2.createEntireLevel(8);
@@ -59,12 +59,18 @@ int main(int argc, char **argv) {
 	cout << "Copy of ScalarField of level 8 took " << duration << "ms.\n";
 
 	t1 = high_resolution_clock::now();
+	x = y;
+	t2 = high_resolution_clock::now();
+	duration = duration_cast<milliseconds>(t2-t1).count();
+	cout << "Copy of ScalarField of level 8 into equal level took " << duration << "ms.\n";
+
+	t1 = high_resolution_clock::now();
 	y *= x;
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Multiply *= ScalarField of level 8 took " << duration << "ms.\n";
 
-	ScalarField3 l7s('x', &h3);
+	ScalarField3 l7s;
 	l7s.createEntireLevel(7);
 	t1 = high_resolution_clock::now();
 	y *= l7s;
@@ -72,8 +78,8 @@ int main(int argc, char **argv) {
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Multiply *= ScalarField of level 8 with level 7 took " << duration << "ms.\n";
 
-	ScalarField3 l6s('x', &h3);
-	l6s.createEntireLevel(6);
+	ScalarField3 l6s;
+	l6s.createEntireLevel(4);
 	t1 = high_resolution_clock::now();
 	y *= l6s;
 	t2 = high_resolution_clock::now();

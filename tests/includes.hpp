@@ -5,8 +5,8 @@
  *      Author: snk
  */
 
-#ifndef TESTS_INCLUDES_HPP_
-#define TESTS_INCLUDES_HPP_
+#pragma once
+
 // STL includes
 
 #include <iostream>
@@ -66,7 +66,7 @@ typedef Field<Vec3, H4> VectorField4;
 // Write a 2D scalar field to a PGM. Scales automatically.
 // Level determines resolution.
 void write_pgm(char* filename, ScalarField2 &field, level_t level) {
-	H2 hcs = *field.hcs;
+	H2& hcs = field.hcs;
 	H2::pos_t orig_center = hcs.center;
 	H2::pos_t orig_scales = hcs.scales;
 
@@ -123,4 +123,4 @@ void read_pgm(char *filename, int width, int height, uint8_t *buffer) {
 	f.close();
 }
 
-#endif /* TESTS_INCLUDES_HPP_ */
+

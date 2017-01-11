@@ -8,8 +8,8 @@ int main(int argc, char **argv) {
 
 	H2 h2;
 
-	ScalarField3 f('x', &h3);
-	ScalarField2 u('x', &h2);
+	ScalarField3 f;
+	ScalarField2 u;
 	auto t1 = high_resolution_clock::now();
 
 	// Create random structure between level 5 and 10 coords.
@@ -64,8 +64,7 @@ int main(int argc, char **argv) {
 
 	for (auto &bc : u.boundary) bc = nullptr;
 	for (auto e : u) {
-		level_t l = h2.GetLevel(e.first);
-		e.second = l;
+		e.second = h2.GetLevel(e.first); // Value = level
 	}
 	u.propagate();
 	write_pgm("test32.pgm", u, 10);

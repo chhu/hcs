@@ -6,24 +6,27 @@ int main(int argc, char **argv) {
 
 	#ifdef __BMI2__
 	printf("Compiled with BMI2!\n");
+	#else
+	printf("NO BMI2\n");
 	#endif
 
-
-	// Test suite
 	H1 h1;
 	H2 h2;
 	H3 h3;
 
-	coord_t c = h2.createFromUnscaled(9, {127,256});
+	coord_t c;
+
+	c = h1.createFromUnscaled(8, {127});
+	cout << h1.toString(c) << endl;
+
+	c = h2.createFromUnscaled(8, {127,127});
 	cout << h2.toString(c) << endl;
 
 	c = h3.createFromUnscaled(8, {127,127,127});
 	cout << h3.toString(c) << endl;
 
-	c = h1.createFromUnscaled(8, {127});
-	cout << h1.toString(c) << endl;
 
-	ScalarField2 x('x', &h2);
+	ScalarField2 x;
 	x.createEntireLevel(8);
 	cout << "Coefficient Test\n";
 	cout << "Operating on a complete 2D level 8 scalar field, X and Y scaled as unit-cube.\nPrints interpolation coeffs for a provided coord.\n";
@@ -50,6 +53,10 @@ int main(int argc, char **argv) {
 		cout << "Non-Existent recursive calls: " << x.coeff_down_count <<
 				" Top-averaging recursive calls: " << x.coeff_up_count <<
 				" Total (should be 1): " << sum << endl;
+		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
+			coord_t ne_coord = h2.getNeighbor(c, ne_idx);
+			cout << h2.toString(ne_coord) << " " << x.get(ne_coord) << endl;
+		}
 
 	}
 
