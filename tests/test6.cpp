@@ -47,7 +47,7 @@ public:
 		int debug = 3;
 
 		typedef double T;
-		long double rho_1, rho_2, alpha, beta, omega, norm_b, norm_r, start_t, end_t;
+		T rho_1, rho_2, alpha, beta, omega, norm_b, norm_r, start_t, end_t;
 		T Ap = 1./(-4.);
 		FTYPE p, phat, s, shat, t, v, r, rtilde;
 
@@ -62,7 +62,7 @@ public:
 
 		norm_b = this->norm(b);
 
-		if (isnan(norm_r) || isnan(norm_b)) {
+		if (std::isnan(norm_r) || std::isnan(norm_b)) {
 			cout << "BICGS found nan solution (iter 0)" << norm_b << " " << norm_r << endl;
 			exit(4);
 		}
@@ -116,7 +116,7 @@ public:
 			rho_2 = rho_1;
 			norm_r = this->norm(r);
 
-			if (isnan(norm_r)) {
+			if (std::isnan(norm_r)) {
 	           	cout << "BICGS found nan r-norm at iteration " << iter << endl;
 				norm_r = 1000.;
 			}
@@ -170,10 +170,8 @@ int main(int argc, char **argv) {
 		return row_result;
 	};
 	ScalarField2 b = x;
-	ScalarField2 c = x;
 
-	b += (c * 7);
-	//cout << "ITER: " << solver.solve(M, x, b, 1000, 1e-6, 1e-12) << "\n";
+	cout << "ITER: " << solver.solve(M, x, b, 1000, 1e-6, 1e-12) << "\n";
 
 	cout << b[0];
 

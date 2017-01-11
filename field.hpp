@@ -30,6 +30,7 @@ private:
 	class Bucket;	// The storage class (private)
  public:
 	class iterator; // The public iterator class
+	class dual_iterator; // The public iterator class
 
 	Field(char symbol, HCSTYPE hcs_) : symbol(symbol), _current(NULL), hcs(hcs_), bracket_behavior(BR_THROW) {
 		coeff_up_count = coeff_down_count = 0;
@@ -155,7 +156,7 @@ private:
 
 	// Do we have a value for this coord? And if yes, make sure it is in _current
     // A bucket's end coord is its last existing coord
-	bool exists(coord_t coord) 	{
+	bool exists(coord_t coord) {
 		if (this->_current != NULL && coord >= _current->start && coord <= _current->end) {
 			return true;
 		}
@@ -185,7 +186,7 @@ private:
 		DTYPE result = 0;
 		get(coord, result, true);
 		return result;
-
+/*
 		coeff_map_t coeffs;
 		getCoeffs(coord, coeffs, true);
 		for (auto coeff : coeffs) {
@@ -199,7 +200,7 @@ private:
 				result += getDirect(c) * coeff.second;
 			}
 		}
-		return result;
+		return result;*/
 	}
 
 	map<coord_t, DTYPE> upscale_cache;
@@ -575,18 +576,6 @@ private:
 		return hcs.GetLevel(data.begin()->second->start); // map's sort order is "greater", so highest-level bucket is first.
 	}
 
-	// Iterator methods & class
-    iterator begin(bool top_only = false, int only_level = -1) {
-        return iterator(this, top_only, only_level);
-    }
-
-    iterator end() {	// Just dummy, the begin iterator determines termination
-    	return iterator(this);
-    }
-
-    // Arithmetic Ops, preserving structure of current refinement.
-    // Exampe: a * b keeps sparse structure of a and multiplies with (possible) interpolates from b
-    // while b * a keeps sparse structure of b. A generic merge() can specify merged structure and arbitrary ops.
 
     // Assignment operator requires equal structure, dirty-check with data.size()
 	Field &operator=(const Field& f){
@@ -610,88 +599,22 @@ private:
     		e.second = f;
     	return *this;
     }
-    Field<DTYPE, HCSTYPE> operator+(Field<DTYPE, HCSTYPE> &f)  {
-    	Field<DTYPE, HCSTYPE> result = *this;
-    	result += f;
-		return result;
-	} // add
 
-    Field<DTYPE, HCSTYPE>& operator+=(Field<DTYPE, HCSTYPE>& f) {
-    	f.upscale_cache.clear();
-    	for (auto e : *this)
-    		e.second += f.get(e.first);
-    	f.upscale_cache.clear();
-    	return *this;
-	} // add
+    // Arithmetic Ops, preserving structure of current refinement.
+    // Exampe: a * b keeps sparse structure of a and multiplies with (possible) interpolates from b
+    // while b * a keeps sparse structure of b. A generic merge() can specify merged structure and arbitrary ops.
 
-    Field<DTYPE, HCSTYPE> operator+(DTYPE f) {
-    	Field<DTYPE, HCSTYPE> result = *this;
-    	result += f;
-		return result;
-	} // add
+    Field<DTYPE, HCSTYPE> operator-() const { Field<DTYPE, HCSTYPE> result = *this; for (auto e : result) e.second = -e.second; return result;}
 
-    Field<DTYPE, HCSTYPE>& operator+=(DTYPE f) {
-    	for (auto e : *this)
-    		e.second += f;
-    	return *this;
-	} // add
+    Field<DTYPE, HCSTYPE>& operator*= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second *= const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    Field<DTYPE, HCSTYPE>& operator/= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second /= const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    Field<DTYPE, HCSTYPE>& operator+= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second += const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    Field<DTYPE, HCSTYPE>& operator-= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second -= const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
 
-    Field<DTYPE, HCSTYPE> operator-(Field<DTYPE, HCSTYPE> &f)  {
-    	Field<DTYPE, HCSTYPE> result = *this;
-    	result -= f;
-		return result;
-	} // add
-
-    Field<DTYPE, HCSTYPE>& operator-=(Field<DTYPE, HCSTYPE>& f) {
-    	f.upscale_cache.clear();
-    	for (auto e : *this)
-    		e.second -= f.get(e.first);
-    	f.upscale_cache.clear();
-    	return *this;
-	} // add
-
-    Field<DTYPE, HCSTYPE> operator*(Field<DTYPE, HCSTYPE> &f)  {
-    	Field<DTYPE, HCSTYPE> result = *this;
-    	result *= f;
-		return result;
-	} // add
-
-    Field<DTYPE, HCSTYPE>& operator*=(Field<DTYPE, HCSTYPE>& f) {
-    	f.upscale_cache.clear();
-    	for (auto e : *this) {
-    		e.second *= f.get(e.first);
-    	}
-    	f.upscale_cache.clear();
-    	return *this;
-	} // add
-
-    Field<DTYPE, HCSTYPE> operator*(DTYPE f) {
-    	Field<DTYPE, HCSTYPE> result = *this;
-    	result *= f;
-		return result;
-	} // add
-
-    Field<DTYPE, HCSTYPE>& operator*=(DTYPE f) {
-    	for (auto e : *this) {
-    		e.second *= f;
-    	}
-    	return *this;
-	} // add
-
-    const Field<DTYPE, HCSTYPE> operator/(Field<DTYPE, HCSTYPE> &f) const {
-    	Field<DTYPE, HCSTYPE> result = *this;
-    	result /= f;
-		return result;
-	} // add
-
-    Field<DTYPE, HCSTYPE>& operator/=(Field<DTYPE, HCSTYPE>& f) {
-    	f.upscale_cache.clear();
-    	for (auto e : *this)
-    		e.second /= f.get(e.first);
-    	f.upscale_cache.clear();
-
-    	return *this;
-	} // add
+    Field<DTYPE, HCSTYPE>& operator*= (const DTYPE& val) { for (auto e : (*this)) e.second *= val; return *this;}
+    Field<DTYPE, HCSTYPE>& operator/= (const DTYPE& val) { for (auto e : (*this)) e.second /= val; return *this;}
+    Field<DTYPE, HCSTYPE>& operator+= (const DTYPE& val) { for (auto e : (*this)) e.second += val; return *this;}
+    Field<DTYPE, HCSTYPE>& operator-= (const DTYPE& val) { for (auto e : (*this)) e.second -= val; return *this;}
 
     // Converts a Field with another DTYPE according to convert function.
     // The convert function must have a single argument of the foreign DTYPE2 and return DTYPE.
@@ -739,6 +662,16 @@ private:
 		data[0] = new Bucket(0, 0);
 		data[0]->setTop(0, true);
 	}
+
+	// Iterator methods & class
+    iterator begin(bool top_only = false, int only_level = -1) {
+        return iterator(this, top_only, only_level);
+    }
+
+    iterator end() {	// Just dummy, the begin iterator determines termination
+    	return iterator(this);
+    }
+
 
 	// C++ goodies, with this operator you can iterate over all existing coords in a field
 	class iterator {
@@ -819,6 +752,48 @@ private:
 	    int only_level;
 	    Bucket *bucket;
 	    Field<DTYPE, HCSTYPE> *field;
+	};
+
+	// Iterator methods & class
+    dual_iterator begin(Field<DTYPE, HCSTYPE>* field2, bool top_only = false, int only_level = -1) {
+    	return dual_iterator(this, field2, iterator(this, top_only, only_level), iterator(field2, top_only, only_level));
+    }
+
+    iterator dual_end() {	// Just dummy, the begin iterator determines termination
+    	return iterator(this);
+    }
+
+	class dual_iterator {
+	  public:
+	    dual_iterator(Field<DTYPE, HCSTYPE>* field1, Field<DTYPE, HCSTYPE>* field2, iterator if1, iterator if2 ) : field1(field1), field2(field2), if1(if1), if2(if2) {
+	    }
+
+	    // these three methods form the basis of an iterator for use with
+	    // a range-based for loop
+	    bool operator!= (const iterator& other) const {
+	        return if1 != field1->end() && if2 != field2->end();
+	    }
+	    tuple<coord_t, DTYPE&, DTYPE&> operator* () const {
+	    	if (!(if1 != field1->end()))
+	    	    throw range_error("Iterator reached end and was queried for value!");
+	        auto e1 = (*if1);
+	        auto e2 = (*if2);
+	        if (e1.first != e2.first)
+	    	    throw range_error("dual_iterator() called with inconsistent fields!");
+	        return tuple<coord_t, DTYPE&, DTYPE&>(e1.first, e1.second, e2.second);
+	    }
+
+	    dual_iterator& operator++ () {
+	    	++if1;
+	    	++if2;
+	    	return *this;
+	    }
+
+	  private:
+	    Field<DTYPE, HCSTYPE> *field1;
+	    Field<DTYPE, HCSTYPE> *field2;
+	    iterator if1;
+	    iterator if2;
 	};
 
     /*
@@ -949,4 +924,71 @@ private:
 
 };
 
+// Other non-member arithmetic ops
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator* (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result *= rhs;
+	return result;
+};
+
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator* (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = rhs;
+	result *= val;
+	return result;
+};
+
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator* (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result *= val;
+	return result;
+};
+
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result /= rhs;
+	return result;
+};
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = rhs;
+	result /= val;
+	return result;
+}
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result /= val;
+	return result;
+}
+
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result += rhs;
+	return result;
+};
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = rhs;
+	result += val;
+	return result;
+}
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result += val;
+	return result;
+}
+
+
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result -= rhs;
+	return result;
+};
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
+	Field<DTYPE, HCSTYPE> result = rhs;
+	result -= val;
+	return result;
+}
+template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	Field<DTYPE, HCSTYPE> result = lhs;
+	result -= val;
+	return result;
+}
 

@@ -49,8 +49,8 @@ public:
 	Tensor1<T, D>(T s) { for (auto &e : value) e = s;}
 
 
-	T norm()			    { return (*this) * (*this);		}
-	T length()			{ return sqrt(norm());			}
+	T norm()			  		{ return (*this) * (*this);		}
+	T length()					{ return sqrt(norm());			}
 	void normalize()			{ (*this) *= 1./length(); 		}
 	Tensor1<T, D> normalized()	{ return Tensor1<T, D>((*this) /= length()); }
 
@@ -62,17 +62,17 @@ public:
 	Tensor1<T, D>& operator=(const Tensor1<T, D> &P)		{ value = P.value;	return *this;	} // assign
 	Tensor1<T, D>& operator=(const T &val)  				{ for (auto &e : value) e = val;	return *this;		} // assign
 
-	Tensor1<T, D>& operator*= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] *= rhs[i]; return *this;}
-	Tensor1<T, D>& operator/= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] /= rhs[i]; return *this;}
-	Tensor1<T, D>& operator+= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] += rhs[i]; return *this;}
-	Tensor1<T, D>& operator-= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] -= rhs[i]; return *this;}
+	Tensor1<T, D>& operator*= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] *= rhs.value[i]; return *this;}
+	Tensor1<T, D>& operator/= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] /= rhs.value[i]; return *this;}
+	Tensor1<T, D>& operator+= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] += rhs.value[i]; return *this;}
+	Tensor1<T, D>& operator-= (const Tensor1<T, D>& rhs)	{ for (int i = 0; i < D; i++) value[i] -= rhs.value[i]; return *this;}
 
 	Tensor1<T, D>& operator*= (const T& val) 				{ for (auto &e : value) e *= val;	return *this;		}
 	Tensor1<T, D>& operator/= (const T& val) 				{ for (auto &e : value) e /= val;	return *this;		}
 	Tensor1<T, D>& operator+= (const T& val) 				{ for (auto &e : value) e += val;	return *this;		}
 	Tensor1<T, D>& operator-= (const T& val) 				{ for (auto &e : value) e -= val;	return *this;		}
 
-	T 			   operator[] (const unsigned i)			{ return value[i];	} // index access to x, y, z
+	T& 			   operator[] (const unsigned i)			{ return value[i];	} // index access to x, y, z
 
 	Tensor1<T, 3> operator^(const Tensor1<T, D>& P) {
 		if (D != 2 && D !=3)
@@ -96,22 +96,40 @@ public:
 
 };
 
-template <typename T, unsigned char D> Tensor1<T, D> operator* (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator* (const T& val, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator* (const Tensor1<T, D>& lhs, const T& val);
+// "Multiply" of two Tensor1 leads to dot-product. Component-wise only with *=
+template <typename T, unsigned char D> T operator* (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
+{ T result = 0; for (int i = 0; i < D; i++) result += lhs.value[i] * rhs.value[i]; return result;}
 
-template <typename T, unsigned char D> Tensor1<T, D> operator/ (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator/ (const T& val, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator/ (const Tensor1<T, D>& lhs, const T& val);
+// Compiler will complain about ambiguity
+//template <typename T, unsigned char D> Tensor1<T, D> operator* (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
+//{ Tensor1<T, D> result = lhs; result *= rhs; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator* (const T& val, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = rhs; result *= val; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator* (const Tensor1<T, D>& lhs, const T& val)
+{ Tensor1<T, D> result = lhs; result *= val; return result;}
 
-template <typename T, unsigned char D> Tensor1<T, D> operator+ (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator+ (const T& val, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator+ (const Tensor1<T, D>& lhs, const T& val);
+template <typename T, unsigned char D> Tensor1<T, D> operator/ (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = lhs; result /= rhs; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator/ (const T& val, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = rhs; result /= val; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator/ (const Tensor1<T, D>& lhs, const T& val)
+{ Tensor1<T, D> result = lhs; result /= val; return result;}
 
-template <typename T, unsigned char D> Tensor1<T, D> operator- (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator- (const T& val, const Tensor1<T, D>& rhs);
-template <typename T, unsigned char D> Tensor1<T, D> operator- (const Tensor1<T, D>& lhs, const T& val);
+template <typename T, unsigned char D> Tensor1<T, D> operator+ (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = lhs; result += rhs; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator+ (const T& val, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = rhs; result += val; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator+ (const Tensor1<T, D>& lhs, const T& val)
+{ Tensor1<T, D> result = lhs; result += val; return result;}
 
+template <typename T, unsigned char D> Tensor1<T, D> operator- (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = lhs; result -= rhs; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator- (const T& val, const Tensor1<T, D>& rhs)
+{ Tensor1<T, D> result = rhs; result -= val; return result;}
+template <typename T, unsigned char D> Tensor1<T, D> operator- (const Tensor1<T, D>& lhs, const T& val)
+{ Tensor1<T, D> result = lhs; result -= val; return result;}
+
+/*
 template <typename T, unsigned char D> valarray<bool> operator== (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
 template <typename T, unsigned char D> valarray<bool> operator== (const T& val, const Tensor1<T, D>& rhs);
 template <typename T, unsigned char D> valarray<bool> operator== (const Tensor1<T, D>& lhs, const T& val);
@@ -119,4 +137,4 @@ template <typename T, unsigned char D> valarray<bool> operator== (const Tensor1<
 template <typename T, unsigned char D> valarray<bool> operator!= (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
 template <typename T, unsigned char D> valarray<bool> operator!= (const T& val, const Tensor1<T, D>& rhs);
 template <typename T, unsigned char D> valarray<bool> operator!= (const Tensor1<T, D>& lhs, const T& val);
-
+*/

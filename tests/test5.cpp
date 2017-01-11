@@ -27,7 +27,37 @@ int main(int argc, char **argv) {
 
 
 	ScalarField2 x;
-	x.createEntireLevel(8);
+	x.createEntireLevel(2);
+	ScalarField2 y = x;
+	x = 5;
+	y = 3;
+
+	y *= x;
+	y += 2;
+	x = -y;
+	ScalarField2 z = x * 8. + y * y;
+
+	for (auto e = x.begin(); e != x.end(); ++e) {
+		cout << h2.toString((*e).first) << " " << (*e).second << endl;
+	}
+
+	int i = 0;
+	for (auto e = x.begin(&y); e != x.end(); ++e) {
+		coord_t c  = get<0>(*e);
+		data_t &v1 = get<1>(*e);
+		data_t &v2 = get<2>(*e);
+
+		cout << h2.toString(c) << " " << v1 << " " << v2 << endl;
+		v2 += i++;
+	}
+	for (auto e : y) {
+		cout << h2.toString(e.first) << " " << e.second << endl;
+	}
+	for (auto e : x) {
+		cout << h2.toString(e.first) << " " << e.second << endl;
+	}
+
+
 	cout << "Coefficient Test\n";
 	cout << "Operating on a complete 2D level 8 scalar field, X and Y scaled as unit-cube.\nPrints interpolation coeffs for a provided coord.\n";
 	while (true) {
