@@ -65,7 +65,7 @@ typedef Field<Vec3, H4> VectorField4;
 
 // Write a 2D scalar field to a PGM. Scales automatically.
 // Level determines resolution.
-void write_pgm(char* filename, ScalarField2 &field, level_t level) {
+void write_pgm(string filename, ScalarField2 &field, level_t level) {
 	H2& hcs = field.hcs;
 	H2::pos_t orig_center = hcs.center;
 	H2::pos_t orig_scales = hcs.scales;
@@ -107,7 +107,7 @@ void write_pgm(char* filename, ScalarField2 &field, level_t level) {
 }
 
 // REALLY bad, never use for something productive! Only for lena.
-void read_pgm(char *filename, int width, int height, uint8_t *buffer) {
+void read_pgm(string filename, int width, int height, uint8_t *buffer) {
 	ifstream f(filename, ios::binary);
 	string line;
 	getline(f, line);

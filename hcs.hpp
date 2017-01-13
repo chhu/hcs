@@ -234,6 +234,13 @@ public:
 		return result;
 	}
 
+	// Returns a normal vector for the provided direction
+	pos_t getNeighborDirection(uint8_t direction) {
+		pos_t result {}; // all zero
+		result [direction >> 1] = direction & 1 ? -1. : 1.;
+		return result;
+	}
+
 
 	// Returns the iteration level of this coordinate. Higher level coordinates carry more information.
 	// CAREFUL: The Special bit is not cleared here for performance reasons!

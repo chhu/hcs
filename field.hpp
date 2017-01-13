@@ -54,7 +54,7 @@ private:
 		this->hcs = f.hcs;
 		this->bracket_behavior = f.bracket_behavior;
 		this->data = f.data;
-		this->boundary = f.boundary;
+		//this->boundary = f.boundary;
 		coeff_up_count = coeff_down_count = 0;
 		// The buckets are pointers, so in order to not get a reference to the values, we need to copy separately.
 		for (auto & bucket : data) {

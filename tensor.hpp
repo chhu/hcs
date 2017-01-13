@@ -45,6 +45,7 @@ public:
 
 	// Constructors
 	Tensor1<T, D>() {}
+	Tensor1<T, D>(const array<T, D> &ia) { value = ia; }
 	Tensor1<T, D>(initializer_list<T> il) { copy(il.begin(), il.end(), value.begin()); }
 	Tensor1<T, D>(T s) { for (auto &e : value) e = s;}
 
@@ -90,7 +91,7 @@ public:
 		os << "T1(";
 		for (auto e : t.value)
 			os << e << ", ";
-		os << "[" << D << "]) ";
+		os << "[" << (int)D << "]) ";
 		return os;
 	}
 

@@ -1,21 +1,15 @@
-#include "includes.hpp";
+#include "includes.hpp"
 
 template<typename DTYPE, typename FTYPE>
 class Matrix {
 public:
 	function<DTYPE(coord_t, DTYPE, FTYPE&)> mul_stencil;
 	void mul(FTYPE& x, FTYPE& result) {
-		auto iter_x = x.begin();
-		auto iter_result = result.begin();
-		while (iter_x != x.end()) {  // one row per while-loop
-
-			auto x_pair = *iter_x;
-			auto result_pair = *iter_result;
-			coord_t coord = x_pair.first;
-			assert(coord == result_pair.first);	// Should be identical
-
-			result_pair.second = mul_stencil(coord, x_pair.second, x);
-			++iter_x; ++iter_result;
+		auto dual_it = x.begin(&result);
+		while (dual_it != x.end()) {  // one row per while-loop
+			coord_t coord = get<0>(*dual_it);
+			get<2>(*dual_it) = mul_stencil(coord, get<1>(*dual_it), x);
+			++dual_it;
 		}
 	}
 };
@@ -25,13 +19,8 @@ class Solver {
 public:
 	data_t dot(FTYPE& a, FTYPE& b) {
 		data_t result = 0;
-		auto iter_a = a.begin();
-		auto iter_b = b.begin();
-		while (iter_a != a.end()) {  // one row per while-loop
-			result += (*iter_a).second * (*iter_b).second;
-			++iter_a;
-			++iter_b;
-		}
+		for (auto iter = a.begin(&b); iter != a.end(); ++iter)
+			result += std::get<1>(*iter) * std::get<2>(*iter);
 		return result;
 	}
 
@@ -48,8 +37,16 @@ public:
 
 		typedef double T;
 		T rho_1, rho_2, alpha, beta, omega, norm_b, norm_r, start_t, end_t;
-		T Ap = 1./(-4.);
-		FTYPE p, phat, s, shat, t, v, r, rtilde;
+		T Ap = 1.;//1./(-4.);
+		FTYPE p = x;
+		p = 0.;
+		FTYPE phat = p;
+		FTYPE s = p;
+		FTYPE shat = p;
+		FTYPE t = p;
+		FTYPE v = p;
+		FTYPE r = p;
+		FTYPE rtilde = p;
 
 		iter = 0;
 		phat = 0;
@@ -60,8 +57,10 @@ public:
 		r *= -1;
 		r += b;
 
-		norm_b = this->norm(b);
-
+		norm_b = norm(b);
+		norm_r = norm(r);
+		if (norm_b == 0)
+			norm_b = norm_r;
 		if (std::isnan(norm_r) || std::isnan(norm_b)) {
 			cout << "BICGS found nan solution (iter 0)" << norm_b << " " << norm_r << endl;
 			exit(4);
@@ -155,25 +154,37 @@ int main(int argc, char **argv) {
 	x.createEntireLevel(8);
 	cout << "Solver Test\n";
 
-	x = 1;
 	Solver<data_t, ScalarField2> solver;
 	cout << solver.norm(x) << " " << x.nElements() << " " << x.nElementsTop() << endl;
 	Matrix<data_t, ScalarField2> M;
+
 	M.mul_stencil = [](coord_t coord, data_t x_val, ScalarField2& x)->data_t {
-		//return x_val;
-		//cout << x.hcs.toString(coord) << endl;
-		data_t row_result = -4. * x_val; // This is the main diagonal entry
+		coord_t level = (coord_t)1 << x.hcs.GetLevel(coord);
+		data_t dist = 1. / level;  // Neighbor distance, assuming all directions with equal scale and scale = 1
+		data_t vol = dist * dist;
+		data_t row_result = 0;//-4. * x_val; // This is the main diagonal entry
 		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
+			//Vec2 normal(x.hcs.getNeighborDirection(ne_idx));
 			coord_t ne_coord = x.hcs.getNeighbor(coord, ne_idx);
-			row_result += x.get(ne_coord);
+			data_t ne_val = x.get(ne_coord);
+			data_t coeff  = (0.5 ) / (vol);
+
+			if (x.hcs.IsBoundary(ne_coord)) {
+				coeff *= 0.5;
+				//ne_val = origin.get(ne_coord);
+			}
+			//data_t coeff  = (0.5 * (var_k[coord] + var_k[ne_coord]) * dist) / (dist * vol);
+			row_result += -coeff * ne_val + coeff * x_val;
 		}
 		return row_result;
 	};
+	x = 1;
 	ScalarField2 b = x;
-
+	b = 1.;
 	cout << "ITER: " << solver.solve(M, x, b, 1000, 1e-6, 1e-12) << "\n";
+	//M.mul(x, b);
+	write_pgm("test6.pgm", x, 8);
 
-	cout << b[0];
 
 
 }

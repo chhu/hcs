@@ -1,9 +1,9 @@
 #Tell make to make one .out file for each .cpp file found in the current directory
 CC = g++
 #CFLAGS = -O2 -std=c++11 -march=native -I..
-CFLAGS = -O3 -w -std=c++11 -march=native -I..
+CFLAGS = -O3 -Wno-narrowing -std=c++11 -march=native -I..
 all: $(patsubst %.cpp, %.out, $(wildcard *.cpp))
 %.out: %.cpp
-	$(CC) $(CFLAGS) $< -o $@ -lm
+	$(CC) $(CFLAGS) $< -o $@
 clean:
 	rm *.out 

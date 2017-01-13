@@ -1,4 +1,4 @@
-#include "includes.hpp";
+#include "includes.hpp"
 
 
 
@@ -57,6 +57,9 @@ int main(int argc, char **argv) {
 		cout << h2.toString(e.first) << " " << e.second << endl;
 	}
 
+	for (uint8_t i = 0; i < 6; i++) {
+		cout << "Neighbor direction " << (int)i << " points toward: " << Vec3(h3.getNeighborDirection(i)) << endl;
+	}
 
 	cout << "Coefficient Test\n";
 	cout << "Operating on a complete 2D level 8 scalar field, X and Y scaled as unit-cube.\nPrints interpolation coeffs for a provided coord.\n";
