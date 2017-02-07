@@ -49,7 +49,7 @@ private:
 	// The copy constructor, to make quick copies of the field and its structure
 	// Field<??> a = b; Or Field<??> a(b);
 	Field(const Field<DTYPE, HCSTYPE> &f) {
-		cout << "FCOPY\n"; // debug hint, this is an expensive op and can happen when you least expect it
+		//cout << "FCOPY\n"; // debug hint, this is an expensive op and can happen when you least expect it
 		this->symbol = f.symbol;
 		this->hcs = f.hcs;
 		this->bracket_behavior = f.bracket_behavior;
@@ -104,9 +104,10 @@ private:
 
  private:
 	// The actual data and useful typedefs.
-	typedef typename map<coord_t, Bucket*, greater<coord_t> >::iterator map_iter_t;
-	typedef typename map<coord_t, Bucket*>::iterator map_iter_rev_t;
+	//typedef typename map<coord_t, Bucket*, less<coord_t> >::iterator map_iter_rev_t;
 	typedef map<coord_t, Bucket*, greater<coord_t> > map_t;
+	typedef typename map_t::iterator map_iter_t;
+	typedef typename map_t::reverse_iterator map_iter_t_rev;
 
 	map_t 		data; 				// re-arrange key sort so we can use lower_bound().
 
@@ -186,21 +187,6 @@ private:
 		DTYPE result = 0;
 		get(coord, result, true);
 		return result;
-/*
-		coeff_map_t coeffs;
-		getCoeffs(coord, coeffs, true);
-		for (auto coeff : coeffs) {
-			coord_t c = coeff.first;
-			if (hcs.IsBoundary(c)) {
-				uint8_t boundary_index = hcs.GetBoundaryDirection(c);
-				if (boundary[boundary_index] != nullptr) {
-					result += boundary[boundary_index](c) * coeff.second; // Ask the provided boundary callback
-				}	// If no BC provided, assume zero, do nothing
-			} else {
-				result += getDirect(c) * coeff.second;
-			}
-		}
-		return result;*/
 	}
 
 	map<coord_t, DTYPE> upscale_cache;
@@ -298,6 +284,77 @@ private:
 		if (!exists(coord))
 			throw range_error("isTop coord does not exist!");
 		return this->_current->isTop(coord);
+	}
+
+	void upAverage(int lowest = 0, int highest = 255) {
+		vector<tuple<coord_t, DTYPE> > upper_level_cache;
+		if (highest == 255)
+			highest = getHighestLevel();
+
+		for (map_iter_t_rev it = data.rbegin(); it != data.rend(); ++it) {
+
+			level_t current_level = hcs.GetLevel((*it).first);
+			cout << current_level <<endl;
+			if (current_level < lowest)
+				continue;
+			if (current_level > lowest) {
+				// We have reached the next lower level. Write cache.
+				for (auto& centry : upper_level_cache) {
+					array<DTYPE*, 64> up_values;
+					DTYPE avg = 0;
+					coord_t up_c = std::get<0>(centry);
+					for (coord_t i = 0; i < hcs.parts; i++) {
+						up_values[i] = &getDirect(up_c + i);
+						avg += *up_values[i];
+					}
+					avg /= hcs.parts;
+					for (coord_t i = 0; i < hcs.parts; i++)
+						*up_values[i] = *up_values[i] - avg + 0. * avg + 1. * std::get<1>(centry);
+				}
+				upper_level_cache.clear();
+				lowest = current_level;
+			}
+			if (highest == current_level) // 0-Bucket has only one coord that should have been filled.
+				break;
+			// A Bucket must have a multiple of hcs.parts
+			Bucket *b = it->second;
+			for (coord_t c = b->start; c <= b->end; c ++) {
+				upper_level_cache.push_back(make_tuple(hcs.IncreaseLevel(c,0), b->get(c)));
+			}
+
+		}
+	}
+
+	// almost similar to propagate except lower-level values are averaged instead of overwrite
+	void downAverage() {
+		// Use the <greater> sorting from our data map that will deliver top-level coords first
+		// We don't store the averaged values immediately to avoid excessive lower_bound() lookups
+		vector<tuple<coord_t, DTYPE> > lower_level_cache;
+		level_t highest = getHighestLevel();
+
+		for (auto& entry : data) {
+			level_t current_level = hcs.GetLevel(entry.first);
+			if (current_level < highest) {
+				// We have reached the next lower level. Write cache.
+				for (auto& centry : lower_level_cache) {
+					auto lower_level_value = getDirect(std::get<0>(centry));
+					lower_level_value = 0.5 * lower_level_value + 0.5 * std::get<1>(centry);
+				}
+				lower_level_cache.clear();
+				highest = current_level;
+			}
+			if (highest == 0) // 0-Bucket has only one coord that should have been filled.
+				break;
+			// A Bucket must have a multiple of hcs.parts
+			Bucket *b = entry.second;
+			for (coord_t c = b->start; c <= b->end; c += hcs.parts) {
+				DTYPE total = 0;
+				for (int j = 0; j < hcs.parts; j++)
+					total += b->get(c + j);
+				total /= hcs.parts;
+				lower_level_cache.push_back(make_tuple(hcs.ReduceLevel(c), total));
+			}
+		}
 	}
 
 	// Average all non-top coords from top-level
@@ -578,8 +635,9 @@ private:
 
 
     // Assignment operator requires equal structure, dirty-check with data.size()
+	// isTop is not copied because of assumption of equal structure
 	Field &operator=(const Field& f){
-		cout << "XCOPY\n";
+		//cout << "XCOPY\n";
 		assert(data.size() == f.data.size());
 		auto iter_this = data.begin();
 		auto iter_f = f.data.begin();
