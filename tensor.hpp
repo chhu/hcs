@@ -11,7 +11,7 @@
  *	  cout << t1 * t2 << endl; // dot product
  *	  cout << t1 ^ t2 << endl; // cross product
  *	  cout << t2 * 5  << endl; // scale (5 * t2 does not work because double does not know how to multiply Tensor1)
- *	  cout << t2.normalized() << " " << t2.normalized().length() << endl; // normalized
+ *	  cout << t2.normalized() << " Length: " << t2.normalized().length() << endl; // normalized
  *	
  *  Created on: Dec 27, 2016
  *      Author: Christian Huettig
@@ -20,10 +20,13 @@
 
 using namespace std;
 
+// T == elemental data type, D == dimensions
 template <typename T, unsigned char D>
 class Tensor1 {
 // Attributes
 public:
+	// This wastes storage space for D < 3... But I would miss the comfort.
+	// Better Ideas?
 	union {
 		struct {
 			T x;
@@ -75,6 +78,7 @@ public:
 
 	T& 			   operator[] (const unsigned i)			{ return value[i];	} // index access to x, y, z
 
+	// cross-product for 2 or 3 dimensions
 	Tensor1<T, 3> operator^(const Tensor1<T, D>& P) {
 		if (D != 2 && D !=3)
 			throw range_error("Tensor1 cross product N mismatch");
@@ -87,6 +91,7 @@ public:
 		return result;
 	} // cross product
 	
+	// for use as output stream cout << myT1...
 	friend ostream& operator<< (std::ostream& os, const Tensor1<T, D>& t) {
 		os << "T1(";
 		for (auto e : t.value)
@@ -96,6 +101,8 @@ public:
 	}
 
 };
+
+// All non-member operator overloads to allow lhs/rhs exchange (3 * t1 same as t1 * 3)
 
 // "Multiply" of two Tensor1 leads to dot-product. Component-wise only with *=
 template <typename T, unsigned char D> T operator* (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
