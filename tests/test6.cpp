@@ -31,6 +31,7 @@ public:
 		return result;
 	}
 
+	// A BiCGStab implementation
 	int solve(Matrix<DTYPE,FTYPE>& M, FTYPE& x, FTYPE& b, int max_it, data_t r_tol, data_t a_tol) {
 
 		typedef double T;
@@ -142,7 +143,7 @@ public:
 		return iter;
 	}
 
-	// Steepest Descent solver
+	// Steepest Descent solver (alternative to BiCGStab)
 	int solve2(Matrix<DTYPE,FTYPE>& M, FTYPE& x, FTYPE& b, int max_it, data_t r_tol, data_t a_tol) {
 		int iter = 0;
 		int debug = 3;
@@ -199,42 +200,30 @@ int main(int argc, char **argv) {
 	H1 h1;
 	H2 h2;
 	H3 h3;
-// 0.12475
+
+	const int max_level = 8;
+
 	ScalarField1 x;
-	x.createEntireLevel(8);
-	cout << "Solver Test\n";
-	//x[h1.createFromList({0,1,0,0,0})] = 1;
-	//x[h1.createFromList({0})] = 1;
-	//x[0] = 0.5;
-	//x.propagate();
-	//x.upAverage();
+	x.createEntireLevel(max_level);
+	cout << "Solving Poisson equation Nabla^2(x) = 1 with zero Dirichlet boundary condition in 1D.\n";
+
 	Solver<data_t, ScalarField1> solver;
-	cout << solver.norm(x) << " " << x.nElements() << " " << x.nElementsTop() << endl;
 	Matrix<data_t, ScalarField1> M;
-/*
- * bc_correct = 2 on boundary
-	value = (0.5 * (var_k[i] + var_k[n_]) * f.area * bc_correct) / (f.distance * vol);
-	A.add_element(n_,-value);
-	A.add_element(i,  value);
-*/
+
+	// The Laplacian stencil, a matrix-free implementation. Works at all levels.
 	M.mul_stencil = [](coord_t coord, data_t x_val, ScalarField1& x)->data_t {
-		//if (!x.isTop(coord))
-		//	return 0;
 		coord_t level = (coord_t)1 << x.hcs.GetLevel(coord);
 		data_t dist = 1. / level;  // Neighbor distance, assuming all directions with equal scale and scale = 1
 		data_t vol = dist;
-		data_t row_result = 0;//-2. * x_val; // This is the main diagonal entry
+		data_t row_result = 0;
 		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
-			//Vec2 normal(x.hcs.getNeighborDirection(ne_idx));
 			coord_t ne_coord = x.hcs.getNeighbor(coord, ne_idx);
 			data_t ne_val = x.get(ne_coord);
 			data_t coeff  = (1. ) / (dist * vol);
 
 			if (x.hcs.IsBoundary(ne_coord)) {
-				coeff *= 2;
-				//ne_val = origin.get(ne_coord);
+				coeff *= 2;  // If we hit a boundary, its only half the distance
 			}
-			//data_t coeff  = (0.5 * (var_k[coord] + var_k[ne_coord]) * dist) / (dist * vol);
 			row_result += coeff * x_val - coeff * ne_val;
 		}
 		return row_result;
@@ -243,27 +232,28 @@ int main(int argc, char **argv) {
 	x = 0;
 	ScalarField1 b = x;
 	b = 1.;
-	b[h1.createFromPosition(8, {0.88})] = 1000;
-	b.propagate();
-	//x.boundary[0] = [](coord_t c)->data_t {
-	//	return 1;
-	//};
-	cout << "ITER: " << solver.solve(M, x, b, 22000, 1e-7, 1e-12) << "\n";
-	data_t max_val = 0;
-	ofstream out("t6data.txt");
-	for (auto e : x) {
-		//if (!x.isTop(e.first))
-		//	continue;
-		//if (h1.GetLevel(e.first) != 1)
-		//	continue;
-		out << h1.getPosition(e.first)[0] << " " << e.second << endl;
-		if (e.second > max_val)
-			max_val = e.second;
+	//b[h1.createFromPosition(max_level, {0.88})] = 1000; // creates a spike at the highest level in b
+	b.propagate();  // always a good idea. preserves integral of b at lower levels
+
+	// Turns the right-side boundary value to 1
+	/*
+	x.boundary[0] = [](coord_t c)->data_t {
+		return 1;
+	};
+	*/
+
+	cout << "Finished. Iterations: " << solver.solve(M, x, b, 100000, 1e-9, 1e-12) << "\n";
+
+	for (int o_level = 0; o_level <= max_level; o_level++) {
+		ofstream out("test6_level_" + to_string(o_level) + ".txt");
+		out << "0 " << x.get(h1.getNeighbor(0, 1)) << endl; // Left Boundary value
+		for (auto e : x) {
+			if (h1.GetLevel(e.first) != o_level)
+				continue;
+			out << h1.getPosition(e.first)[0] << " " << e.second << endl;
+		}
+		out << "1 " << x.get(h1.getNeighbor(0, 0)) << endl; // Right Boundary value
+		out.close();
 	}
-	out.close();
-	cout.precision(17);
-	cout << " Max value: " << max_val << endl;
-	//M.mul(x, b);
-	//write_pgm("test6.pgm", x, 8);
 
 }

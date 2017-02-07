@@ -10,6 +10,8 @@ int main(int argc, char **argv) {
 	printf("NO BMI2\n");
 	#endif
 
+	cout << "Interactive test for HCS and Field class\n";
+
 	H1 h1;
 	H2 h2;
 	H3 h3;
@@ -17,52 +19,28 @@ int main(int argc, char **argv) {
 	coord_t c;
 
 	c = h1.createFromUnscaled(8, {127});
-	cout << h1.toString(c) << endl;
+	cout << "1D-center level-8: " << h1.toString(c) << endl;
 
 	c = h2.createFromUnscaled(8, {127,127});
-	cout << h2.toString(c) << endl;
+	cout << "2D-center level-8: " <<  h2.toString(c) << endl;
 
 	c = h3.createFromUnscaled(8, {127,127,127});
-	cout << h3.toString(c) << endl;
+	cout << "3D-center level-8: " <<  h3.toString(c) << endl;
 
-
-	ScalarField2 x;
-	x.createEntireLevel(2);
-	ScalarField2 y = x;
-	x = 5;
-	y = 3;
-
-	y *= x;
-	y += 2;
-	x = -y;
-	ScalarField2 z = x * 8. + y * y;
-
-	for (auto e = x.begin(); e != x.end(); ++e) {
-		cout << h2.toString((*e).first) << " " << (*e).second << endl;
-	}
-
-	int i = 0;
-	for (auto e = x.begin(&y); e != x.end(); ++e) {
-		coord_t c  = get<0>(*e);
-		data_t &v1 = get<1>(*e);
-		data_t &v2 = get<2>(*e);
-
-		cout << h2.toString(c) << " " << v1 << " " << v2 << endl;
-		v2 += i++;
-	}
-	for (auto e : y) {
-		cout << h2.toString(e.first) << " " << e.second << endl;
-	}
-	for (auto e : x) {
-		cout << h2.toString(e.first) << " " << e.second << endl;
-	}
-
-	for (uint8_t i = 0; i < 6; i++) {
+	cout << "3D Neighbor directions from HCS.getNeighborDirection():\n";
+	for (uint8_t i = 0; i < 6; i++) {	// 6 neighbors for 3 dimensions 2 * D
 		cout << "Neighbor direction " << (int)i << " points toward: " << Vec3(h3.getNeighborDirection(i)) << endl;
 	}
 
-	cout << "Coefficient Test\n";
+	cout << "2D Coefficient Test\n";
 	cout << "Operating on a complete 2D level 8 scalar field, X and Y scaled as unit-cube.\nPrints interpolation coeffs for a provided coord.\n";
+
+	ScalarField2 x;
+	x.createEntireLevel(8);
+	x.bracket_behavior = ScalarField2::BR_INTERP;
+	for (auto e : x) {
+		e.second = h2.getPosition(e.first)[0];	// Set the value of the field to the X Cartesian-coord
+	}
 	while (true) {
 		level_t level;
 		H2::pos_t uc;
@@ -85,7 +63,10 @@ int main(int argc, char **argv) {
 		}
 		cout << "Non-Existent recursive calls: " << x.coeff_down_count <<
 				" Top-averaging recursive calls: " << x.coeff_up_count <<
-				" Total (should be 1): " << sum << endl;
+				" Total (should be 1): " << sum << endl <<
+				" Value: " << x.get(c) << endl <<
+				"Neighbor coords and values:\n";
+
 		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
 			coord_t ne_coord = h2.getNeighbor(c, ne_idx);
 			cout << h2.toString(ne_coord) << " " << x.get(ne_coord) << endl;
