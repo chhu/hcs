@@ -232,25 +232,29 @@ int main(int argc, char **argv) {
 	x = 0;
 	ScalarField1 b = x;
 	b = 1.;
+
 	//b[h1.createFromPosition(max_level, {0.88})] = 1000; // creates a spike at the highest level in b
 	b.propagate();  // always a good idea. preserves integral of b at lower levels
 
+
 	// Turns the right-side boundary value to 1
 	/*
-	x.boundary[0] = [](coord_t c)->data_t {
-		return 1;
+	x.boundary[0] = [](ScalarField1 *self, coord_t c)->data_t {
+		//return self->get(self->hcs.removeBoundary(c)); // Neumann, derivative == 0
+		return 1;	// Dirichlet to 1
 	};
+	x.boundary_propagate[0] = false; // propagation must be disabled for Dirichlet != 0 or solver will fail. For Neumann, propagation must stay enabled.
 	*/
+
 
 	cout << "Finished. Iterations: " << solver.solve(M, x, b, 100000, 1e-9, 1e-12) << "\n";
 
 	for (int o_level = 0; o_level <= max_level; o_level++) {
 		ofstream out("test6_level_" + to_string(o_level) + ".txt");
 		out << "0 " << x.get(h1.getNeighbor(0, 1)) << endl; // Left Boundary value
-		for (auto e : x) {
-			if (h1.GetLevel(e.first) != o_level)
-				continue;
-			out << h1.getPosition(e.first)[0] << " " << e.second << endl;
+		for (data_t ux = 0; ux < pow(2, o_level); ux++) {
+			coord_t c = h1.createFromUnscaled(o_level, {ux});
+			out << h1.getPosition(c)[0] << " " << x.get(c) << endl;
 		}
 		out << "1 " << x.get(h1.getNeighbor(0, 0)) << endl; // Right Boundary value
 		out.close();

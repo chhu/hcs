@@ -57,8 +57,8 @@ int main(int argc, char **argv) {
 	// BC 0 = BC 1 = reflect (X+ X-
 	// BC 3 = 0 (default) (Y+)
 	// BC 2 = 1 (Y-)
-	u.boundary[2] = [](coord_t cc)->data_t { return 1;};
-	u.boundary[0] = u.boundary[1] = [&u, &h2](coord_t cc)->data_t { coord_t c = h2.removeBoundary(cc); return u.get(c);};
+	u.boundary[2] = [](ScalarField2 *self, coord_t cc)->data_t { return 1;};
+	u.boundary[0] = u.boundary[1] = [](ScalarField2 *self, coord_t cc)->data_t { coord_t c = self->hcs.removeBoundary(cc); return self->get(c);};
 
 	write_pgm("test31.pgm", u, 10);
 

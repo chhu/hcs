@@ -39,6 +39,8 @@ private:
 		data[0]->setTop(0, true);
 		for (auto &bf : boundary)
 			bf = nullptr;
+		for (bool &bf_prop : boundary_propagate)
+			bf_prop = true;
 	}
 
 	Field(char symbol) : Field(symbol, HCSTYPE()) {}
@@ -54,7 +56,9 @@ private:
 		this->hcs = f.hcs;
 		this->bracket_behavior = f.bracket_behavior;
 		this->data = f.data;
-		//this->boundary = f.boundary;
+		boundary_propagate = f.boundary_propagate;
+		for (int i = 0; i < 64; i++)
+			this->boundary[i] = boundary_propagate[i] ? f.boundary[i] : nullptr;
 		coeff_up_count = coeff_down_count = 0;
 		// The buckets are pointers, so in order to not get a reference to the values, we need to copy separately.
 		for (auto & bucket : data) {
@@ -77,7 +81,8 @@ private:
 	HCSTYPE	hcs;
 
 	// The boundary functions
-	array<function<DTYPE(coord_t origin)>, 64> boundary; // max 32
+	array<function<DTYPE(Field<DTYPE, HCSTYPE> *self, coord_t origin)>, 64> boundary; // max 32 dimensions
+	array<bool, 64> boundary_propagate;												  // if this field is copied, is the boundary function copied too?
 
 	/*
 	 * Open properties, without getter / setter, feel free to modify them at any time.
@@ -194,7 +199,7 @@ private:
 		if (hcs.IsBoundary(coord)) {
 			uint8_t boundary_index = hcs.GetBoundaryDirection(coord);
 			if (boundary[boundary_index] != nullptr)
-				result = boundary[boundary_index](coord);
+				result = boundary[boundary_index](this, coord);
 			else
 				result = 0;
 			return;
@@ -256,7 +261,7 @@ private:
 					for (auto b_coord : boundary_shares) {
 						uint8_t boundary_index = hcs.GetBoundaryDirection(b_coord);
 						if (boundary[boundary_index] != nullptr)
-							result += boundary[boundary_index](b_coord) * (weight / (data_t)boundary_shares.size()); // Ask the provided boundary callback
+							result += boundary[boundary_index](this, b_coord) * (weight / (data_t)boundary_shares.size()); // Ask the provided boundary callback
 					}
 					continue;
 				}
@@ -649,6 +654,9 @@ private:
 			++iter_f;
 		}
 		_current = NULL;
+		boundary_propagate = f.boundary_propagate;
+		for (int i = 0; i < 64; i++)
+			this->boundary[i] = boundary_propagate[i] ? f.boundary[i] : nullptr;
 		return *this;
 	};
 
