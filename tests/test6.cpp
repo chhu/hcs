@@ -230,6 +230,7 @@ int main(int argc, char **argv) {
 	};
 
 	x = 0;
+	x.coarse(h1.createFromPosition(4,{0.49}));
 	ScalarField1 b = x;
 	b = 1.;
 
