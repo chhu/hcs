@@ -5,7 +5,7 @@ class Matrix {
 public:
 	function<DTYPE(coord_t, DTYPE, FTYPE&)> mul_stencil;
 	void mul(FTYPE& x, FTYPE& result) {
-		auto dual_it = x.begin(&result);
+		auto dual_it = x.begin(&result, true);
 		while (dual_it != x.end()) {  // one row per while-loop
 			coord_t coord = get<0>(*dual_it);
 			get<2>(*dual_it) = mul_stencil(coord, get<1>(*dual_it), x);
@@ -19,15 +19,16 @@ class Solver {
 public:
 	data_t dot(FTYPE& a, FTYPE& b) {
 		data_t result = 0;
-		for (auto iter = a.begin(&b); iter != a.end(); ++iter)
+		for (auto iter = a.begin(&b, true); iter != a.end(); ++iter) {
 			result += std::get<1>(*iter) * std::get<2>(*iter);
+		}
 		return result;
 	}
 
 	data_t norm(FTYPE& a) {
 		data_t result = 0;
-		for (auto e : a)
-			result += e.second * e.second;
+		for (auto e = a.begin(true); e != a.end(); ++e)
+			result += (*e).second * (*e).second;
 		return result;
 	}
 
@@ -35,7 +36,7 @@ public:
 	int solve(Matrix<DTYPE,FTYPE>& M, FTYPE& x, FTYPE& b, int max_it, data_t r_tol, data_t a_tol) {
 
 		typedef double T;
-		long double rho_1, rho_2, alpha, beta, omega, norm_b, norm_r, start_t, end_t;
+		double rho_1, rho_2, alpha, beta, omega, norm_b, norm_r, start_t, end_t;
 		//int n = x.size();
 		//int n_sim = this->sim->grid->gross_points;
 		int iter = 0;
@@ -201,7 +202,7 @@ int main(int argc, char **argv) {
 	H2 h2;
 	H3 h3;
 
-	const int max_level = 8;
+	const int max_level = 4;
 
 	ScalarField1 x;
 	x.createEntireLevel(max_level);
@@ -216,26 +217,34 @@ int main(int argc, char **argv) {
 		data_t dist = 1. / level;  // Neighbor distance, assuming all directions with equal scale and scale = 1
 		data_t vol = dist;
 		data_t row_result = 0;
+		ScalarField1::coeff_map_t coeffs;
 		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
 			coord_t ne_coord = x.hcs.getNeighbor(coord, ne_idx);
-			data_t ne_val = x.get(ne_coord);
 			data_t coeff  = (1. ) / (dist * vol);
-
-			if (x.hcs.IsBoundary(ne_coord)) {
+			if (x.hcs.IsBoundary(ne_coord))
 				coeff *= 2;  // If we hit a boundary, its only half the distance
+			ScalarField1::coeff_map_t coeffs_ne;
+			x.getCoeffs(ne_coord, coeffs_ne, false);
+			coeffs[coord] += coeff;
+			for (const auto &e : coeffs_ne) {
+				coeffs[e.first] -= coeff * e.second;
 			}
-			row_result += coeff * x_val - coeff * ne_val;
 		}
+		for (auto e : coeffs)
+			row_result += x.get(e.first) * e.second;
 		return row_result;
 	};
 
 	x = 0;
-	x.coarse(h1.createFromPosition(4,{0.49}));
+	coord_t hole = h1.createFromPosition(3,{0.49});
+	x.coarse(hole);
 	ScalarField1 b = x;
 	b = 1.;
+//	b[hole] = 0;
+	for (auto e : b) if (!b.isTop(e.first)) e.second = 0;
 
 	//b[h1.createFromPosition(max_level, {0.88})] = 1000; // creates a spike at the highest level in b
-	b.propagate();  // always a good idea. preserves integral of b at lower levels
+	//b.propagate();  // always a good idea. preserves integral of b at lower levels
 
 
 	// Turns the right-side boundary value to 1
@@ -246,10 +255,14 @@ int main(int argc, char **argv) {
 	};
 	x.boundary_propagate[0] = false; // propagation must be disabled for Dirichlet != 0 or solver will fail. For Neumann, propagation must stay enabled.
 	*/
+//	M.mul(b, x);
 
+	cout << "Finished. Iterations: " << solver.solve(M, x, b, 100, 1e-6, 1e-12) << "\n";
 
-	cout << "Finished. Iterations: " << solver.solve(M, x, b, 100000, 1e-9, 1e-12) << "\n";
-
+	for (auto e : x) {
+		cout << h1.toString(e.first) << " V: " << e.second << endl;
+	}
+	/*
 	for (int o_level = 0; o_level <= max_level; o_level++) {
 		ofstream out("test6_level_" + to_string(o_level) + ".txt");
 		out << "0 " << x.get(h1.getNeighbor(0, 1)) << endl; // Left Boundary value
@@ -260,5 +273,5 @@ int main(int argc, char **argv) {
 		out << "1 " << x.get(h1.getNeighbor(0, 0)) << endl; // Right Boundary value
 		out.close();
 	}
-
+*/
 }

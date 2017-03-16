@@ -185,12 +185,12 @@ private:
 	// Returns value for coord, if not present, interpolates.
 	// if it is not TLC, return value anyway. To retrieve proper values from non-TLC
 	// call propagate() first
-	DTYPE get(coord_t coord) {
-		if (exists(coord)) {
-			return _current->get(coord);
-		}
+	DTYPE get(coord_t coord, bool use_non_top = true) {
+		//if (exists(coord)) {
+		//	return _current->get(coord);
+		//}
 		DTYPE result = 0;
-		get(coord, result, true);
+		get(coord, result, use_non_top);
 		return result;
 	}
 
@@ -265,7 +265,11 @@ private:
 					}
 					continue;
 				}
-				if (exists(current)) {
+
+				bool go = exists(current);
+				if (!_current->isTop(current) && !use_non_top)
+					go = false;
+				if (go) {
 					result += _current->get(current) * weight;
 				} else {
 					auto it = upscale_cache.find(current);
@@ -281,7 +285,6 @@ private:
 				}
 			}
 		}
-
 	}
 
 	// Do coordinates exist in a higher level?
@@ -513,7 +516,10 @@ private:
 					continue;
 				}
 
-				if (exists(current)) {
+				bool go = exists(current);
+				if (!_current->isTop(current) && !use_non_top)
+					go = false;
+				if (go) {
 					coeffs[current] += weight;
 				} else {
 					coeff_map_t partial;
@@ -823,10 +829,6 @@ private:
 	// Iterator methods & class
     dual_iterator begin(Field<DTYPE, HCSTYPE>* field2, bool top_only = false, int only_level = -1) {
     	return dual_iterator(this, field2, iterator(this, top_only, only_level), iterator(field2, top_only, only_level));
-    }
-
-    iterator dual_end() {	// Just dummy, the begin iterator determines termination
-    	return iterator(this);
     }
 
 	class dual_iterator {
