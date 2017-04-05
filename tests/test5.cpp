@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
 	cout << "3D Neighbor directions from HCS.getNeighborDirection():\n";
 	for (uint8_t i = 0; i < 6; i++) {	// 6 neighbors for 3 dimensions 2 * D
-		cout << "Neighbor direction " << (int)i << " points toward: " << Vec3(h3.getNeighborDirection(i)) << endl;
+		cout << "Neighbor direction " << (int)i << " points toward: " << Vec3(h3.getDirectionNormal(i)) << endl;
 	}
 
 	cout << "2D Coefficient Test\n";

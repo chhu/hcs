@@ -235,7 +235,7 @@ public:
 	}
 
 	// Returns a normal vector for the provided direction
-	pos_t getNeighborDirection(uint8_t direction) {
+	pos_t getDirectionNormal(uint8_t direction) {
 		pos_t result {}; // all zero
 		result [direction >> 1] = direction & 1 ? -1. : 1.;
 		return result;

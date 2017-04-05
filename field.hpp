@@ -266,12 +266,9 @@ private:
 					continue;
 				}
 
-				bool go = exists(current);
-				if (!_current->isTop(current) && !use_non_top)
-					go = false;
-				if (go) {
-					result += _current->get(current) * weight;
-				} else {
+				bool current_exists = exists(current);
+				if (!current_exists || (current_exists && !_current->isTop(current) && !use_non_top)) {
+					// we either have a non-existent coord or an existing non-top coord that we shall not use.
 					auto it = upscale_cache.find(current);
 					if (it != upscale_cache.end()) {
 						result += it->second * weight;
@@ -282,6 +279,8 @@ private:
 					get(current, partial, use_non_top);
 					upscale_cache[current] = partial;
 					result += partial * weight;
+				} else { // current_exists = true in this branch, so _current is valid.
+					result += _current->get(current) * weight;
 				}
 			}
 		}
@@ -516,17 +515,16 @@ private:
 					continue;
 				}
 
-				bool go = exists(current);
-				if (!_current->isTop(current) && !use_non_top)
-					go = false;
-				if (go) {
-					coeffs[current] += weight;
-				} else {
+				bool current_exists = exists(current);
+				if (!current_exists || (current_exists && !_current->isTop(current) && !use_non_top)) {
+					// we either have a non-existent coord or an existing non-top coord that we shall not use.
 					coeff_map_t partial;
 					coeff_down_count++;
 					getCoeffs(current, partial, use_non_top, recursion + 1);
 					for (auto &coeff : partial)
 						coeffs[coeff.first] += coeff.second * weight;
+				} else { // current_exists = true in this branch, so _current is valid.
+					coeffs[current] += weight;
 				}
 			}
 		}

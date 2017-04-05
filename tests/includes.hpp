@@ -105,22 +105,3 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 	}
 	f.close();
 }
-
-// REALLY bad, never use for something productive! Only for lena.
-void read_pgm(string filename, int width, int height, uint8_t *buffer) {
-	ifstream f(filename, ios::binary);
-	string line;
-	getline(f, line);
-	getline(f, line);
-	getline(f, line);
-	getline(f, line);
-	cout << line << endl;
-	for (size_t i = 0; i < width * height; i++) {
-		char c;
-		f.read(&c, 1);
-		buffer[i] = c;
-	}
-	f.close();
-}
-
-
