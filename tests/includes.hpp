@@ -84,7 +84,7 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 		H2::pos_t pos = hcs.getPosition(c);
 		int x = floor(pos[0]);
 		int y = floor(pos[1]);
-		buffer[x + width * y] = field.get(c);
+		buffer[x + width * y] = field[c];
 	}
 	data_t f_min = buffer.min();
 	data_t f_max = buffer.max();

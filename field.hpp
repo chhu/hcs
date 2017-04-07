@@ -1016,7 +1016,8 @@ template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (con
 };
 template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
 	Field<DTYPE, HCSTYPE> result = rhs;
-	result /= val;
+	for (auto e : result)
+		e.second = val / e.second;
 	return result;
 }
 template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
@@ -1041,15 +1042,14 @@ template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (con
 	return result;
 }
 
-
 template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
 	Field<DTYPE, HCSTYPE> result = lhs;
 	result -= rhs;
 	return result;
 };
 template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = rhs;
-	result -= val;
+	Field<DTYPE, HCSTYPE> result = -rhs;
+	result += val;
 	return result;
 }
 template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
