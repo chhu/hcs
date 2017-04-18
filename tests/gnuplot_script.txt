@@ -1,4 +1,0 @@
-plot "test6_level_1.txt" with lines, "test6_level_2.txt" with lines, "test6_level_3.txt" with lines, "test6_level_4.txt" with lines, "test6_level_5.txt" with lines, "test6_level_6.txt" with lines, "test6_level_7.txt" with lines,  "test6_level_8.txt" with lines, -0.5 * (x-0.5)**2+(1./8.)
-pause -1
-
-

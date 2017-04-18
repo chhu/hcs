@@ -14,12 +14,38 @@ using namespace std;
 
 template<typename DTYPE, typename FTYPE>
 class Matrix {
+private:
+	map<coord_t, typename FTYPE::coeff_map_t> coeff_cache;
+	typedef function<typename FTYPE::coeff_map_t(coord_t, FTYPE&)>  stencil_t;
+	stencil_t stencil;	// (coord, value of coord, field) => mul result
+
 public:
-	function<DTYPE(coord_t, DTYPE, FTYPE&)> mul_stencil;	// (coord, value of coord, field) => mul result
-	void mul(FTYPE& x, FTYPE& result) {
-		for (auto dual_it = x.begin(&result, true); dual_it != x.end(); ++dual_it)
-			get<2>(*dual_it) = mul_stencil(get<0>(*dual_it), get<1>(*dual_it), x);
+	void setStencil(stencil_t stencil_) {
+		stencil = stencil_;
+		coeff_cache.clear();
 	}
+
+	void mul(FTYPE& x, FTYPE& result) {
+		for (auto dual_it = x.begin(&result, true); dual_it != x.end(); ++dual_it) {
+			coord_t coord = get<0>(*dual_it);
+
+			auto coeff_cache_it = coeff_cache.find(coord);
+			typename FTYPE::coeff_map_t coeffs;
+			if (coeff_cache_it == coeff_cache.end()) {
+				coeffs = stencil(coord, x);
+				coeff_cache[coord] = coeffs;
+			} else
+				coeffs = coeff_cache_it->second;
+					//stencil(coord, x);
+			DTYPE &result = get<2>(*dual_it);
+			result = coeffs[coord] * get<1>(*dual_it);	// start w main diagonal
+			for (auto coeff : coeffs)
+				if (coeff.first != coord)
+					result += coeff.second * x.get(coeff.first);
+		}
+			//get<2>(*dual_it) = mul_stencil(get<0>(*dual_it), get<1>(*dual_it), x);
+	}
+
 };
 
 template<typename DTYPE, typename FTYPE>
@@ -77,7 +103,7 @@ public:
 		norm_b = this->norm(b);
 		norm_r = this->norm(r);
 
-		if (::isnan(norm_r) || ::isnan(norm_b)) {
+		if (std::isnan(norm_r) || std::isnan(norm_b)) {
 			cout << "BICGS found nan solution (iter 0)" << norm_b << " " << norm_r << endl;
 			norm_r = 1000.;
 			exit(4);
@@ -133,7 +159,7 @@ public:
 			rho_2 = rho_1;
 			norm_r = this->norm(r);
 
-			if (::isnan(norm_r)) {
+			if (std::isnan(norm_r)) {
 	           	cout << "BICGS found nan r-norm at iteration " << iter << endl;
 	           	exit(8);
 			}

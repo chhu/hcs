@@ -66,29 +66,27 @@ typedef Field<Vec3, H4> VectorField4;
 // Write a 2D scalar field to a PGM. Scales automatically.
 // Level determines resolution.
 void write_pgm(string filename, ScalarField2 &field, level_t level) {
-	H2& hcs = field.hcs;
-	H2::pos_t orig_center = hcs.center;
-	H2::pos_t orig_scales = hcs.scales;
-
+	auto& hcs = field.hcs;
 
 	int width = 1U << level;
 	int height= 1U << level;
-	hcs.scales = { width / 2, height / 2};
-	hcs.center = { width / 2, height / 2};
 
 	valarray<data_t> buffer(width * height);
 
 	coord_t level_start = 0;
 	hcs.SetLevel(level_start, level);
+	field.bracket_behavior = ScalarField2::BR_INTERP;
 	for (coord_t c = level_start; c < level_start + width * height; c++) {
-		H2::pos_t pos = hcs.getPosition(c);
-		int x = floor(pos[0]);
-		int y = floor(pos[1]);
+		H2::unscaled_t pos = hcs.getUnscaled(c);
+		int x = pos[0];
+		int y = pos[1];
 		buffer[x + width * y] = field[c];
 	}
 	data_t f_min = buffer.min();
 	data_t f_max = buffer.max();
-	cout << "Field max: " <<f_max << endl;
+	cout << "Field min: " <<f_min << " max: " << f_max << " sum: " << buffer.sum() << endl;
+
+	// Byte-scale
 	if (f_min == f_max)
 		f_min = f_max - 1;
 	else {

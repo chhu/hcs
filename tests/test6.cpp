@@ -23,12 +23,11 @@ int main(int argc, char **argv) {
 	Matrix<data_t, ScalarField1> M;
 
 	// The Laplacian stencil, a matrix-free implementation. Works at all levels.
-	M.mul_stencil = [](coord_t coord, data_t x_val, ScalarField1& x)->data_t {
+	M.setStencil([](coord_t coord, ScalarField1& x)->ScalarField1::coeff_map_t {
 		level_t l = x.hcs.GetLevel(coord);
 		coord_t level = (coord_t)1 << x.hcs.GetLevel(coord);
 		data_t dist = 1. / level;  // Neighbor distance, assuming all directions with equal scale and scale = 1
 		data_t vol = dist;
-		data_t row_result = 0;
 		ScalarField1::coeff_map_t coeffs;
 		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
 			coord_t ne_coord = x.hcs.getNeighbor(coord, ne_idx);
@@ -40,15 +39,11 @@ int main(int argc, char **argv) {
 			coeffs[coord] -= coeff / vol;
 			for (const auto &e : coeffs_ne) {
 				coord_t level_ne = x.hcs.GetLevel(e.first);
-				data_t vol_ne = 1./ (1U << level_ne);
-				data_t vol_avg = 1. * vol + 0 * vol_ne;
-				coeffs[e.first] += (coeff / vol_avg) * e.second;
+				coeffs[e.first] += (coeff / vol) * e.second;
 			}
 		}
-		for (auto e : coeffs)
-			row_result += x.get(e.first) * e.second;
-		return row_result;
-	};
+		return coeffs;
+	});
 
 	x = 0;
 	coord_t hole = h1.createFromPosition(4,{0.49});
