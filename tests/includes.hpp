@@ -103,3 +103,16 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 	}
 	f.close();
 }
+
+void write_txt(string filename, ScalarField1 &field, bool top_only = true) {
+	ofstream f(filename);
+	auto& hcs = field.hcs;
+	map<double, double> x_val;	// to output sorted...
+	for (auto it = field.begin(top_only); it != field.end(); ++it) {
+		double x = hcs.getPosition((*it).first)[0];
+		x_val[x] = (*it).second;
+	}
+	for (auto e : x_val)
+		f << e.first << " " << e.second << endl;
+	f.close();
+}
