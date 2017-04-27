@@ -194,7 +194,7 @@ private:
 		return result;
 	}
 
-	map<coord_t, DTYPE> upscale_cache;
+	//map<coord_t, DTYPE> upscale_cache;
 	void get(coord_t coord, DTYPE& result, bool use_non_top = true) {
 		if (hcs.IsBoundary(coord)) {
 			uint8_t boundary_index = hcs.GetBoundaryDirection(coord);
@@ -269,15 +269,17 @@ private:
 				bool current_exists = exists(current);
 				if (!current_exists || (current_exists && !_current->isTop(current) && !use_non_top)) {
 					// we either have a non-existent coord or an existing non-top coord that we shall not use.
+					/* Caching works but needs to be invalidated every time the field changes...
 					auto it = upscale_cache.find(current);
 					if (it != upscale_cache.end()) {
 						result += it->second * weight;
 						continue;
 					}
+					*/
 					DTYPE partial = 0;
 					coeff_down_count++;
 					get(current, partial, use_non_top);
-					upscale_cache[current] = partial;
+					//upscale_cache[current] = partial;
 					result += partial * weight;
 				} else { // current_exists = true in this branch, so _current is valid.
 					result += _current->get(current) * weight;
@@ -746,7 +748,7 @@ private:
 	// C++ goodies, with this operator you can iterate over all existing coords in a field
 	class iterator {
 	  public:
-	    iterator(Field<DTYPE, HCSTYPE>* field, bool top_only = true, int only_level = -1) : global_index(0), field(field),
+	    iterator(Field<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : global_index(0), field(field),
 		bucket(NULL), bucket_index(0), only_level(only_level), top_only(top_only) {
 	    	map_iter = field->data.begin();
 	    	if (only_level >= 0) {
@@ -839,6 +841,7 @@ private:
 	    bool operator!= (const iterator& other) const {
 	        return if1 != field1->end() && if2 != field2->end();
 	    }
+
 	    tuple<coord_t, DTYPE&, DTYPE&> operator* () const {
 	    	if (!(if1 != field1->end()))
 	    	    throw range_error("Iterator reached end and was queried for value!");

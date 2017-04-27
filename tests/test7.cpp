@@ -42,6 +42,9 @@ int main(int argc, char **argv) {
 			e.second = pos > 0.2 && pos < 0.3  ? 1 : 0;
 		}
 	}
+
+	coord_t coarsed_coord = hcs.createFromPosition(max_level-4,{0.75,0.5});
+
 	if (HCS::GetDimensions() == 2) {
 		// Set velocity to divergence free rotating center
 		// Generate simple divergence free vector field {Y, -X}
@@ -60,8 +63,10 @@ int main(int argc, char **argv) {
 			Vec pos(hcs.getPosition(e.first));
 			e.second = (pos - center_sph).length() > r_sph ? 0 : 1;
 		}
+		//c.coarse(coarsed_coord);
 		c.propagate();
-		//c.coarse(hcs.createFromPosition(max_level-1,{0.5,0.75}));
+//		c[coarsed_coord] = 0;
+
 	}
 
 	// make v stress-free at all boundaries
@@ -71,7 +76,7 @@ int main(int argc, char **argv) {
 		};
 
 	write_pgm("c_init.pgm", c, max_level);
-
+//return 0;
 	Matrix<data_t, ScalarField> M;
 	Solver<data_t, ScalarField> solver;
 
@@ -101,10 +106,12 @@ int main(int argc, char **argv) {
 			ScalarField::coeff_map_t coeffs_ne;
 			x.getCoeffs(ne_coord, coeffs_ne, false);
 
-//			coeffs[coord] += flux > 0 ? flux : 0;
-			coeffs[coord] += flux * 0.5;
+			if (flux > 0)
+				coeffs[coord] += flux;
+//			coeffs[coord] += flux * 0.5;
 			for (const auto &e : coeffs_ne) {
-				coeffs[e.first] += flux * e.second * 0.5;
+				if (flux < 0)
+					coeffs[e.first] += flux * e.second;
 			}
 			if (l < max_level) {
 				cout << neighbor_direction << " : " << face_vel << " " << flux << " " << endl;
@@ -124,7 +131,6 @@ int main(int argc, char **argv) {
 	auto t1 = high_resolution_clock::now();
 	for (int i = 0; i < 100; i++) {
 		M.mul(c, a);
-		c[0] = a[0]; // to avoid compiler optimization
 	}
 	auto t2 = high_resolution_clock::now();
 	auto duration = duration_cast<milliseconds>(t2-t1).count();
@@ -136,7 +142,7 @@ int main(int argc, char **argv) {
 
 		ScalarField rhs = c * 1. / time_step;  // right-hand-side or b-vector. Solve M * c = rhs
 		int its = solver.solve(M, c, rhs, 1000, 1e-8, 1e-14);  // ... with BiCGStab
-
+		c.propagate();
 		write_pgm("c_" + to_string(step) + ".pgm", c, max_level);
 
 		auto t2 = high_resolution_clock::now();

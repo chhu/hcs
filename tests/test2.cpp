@@ -9,31 +9,31 @@ int main(int argc, char **argv) {
 	VectorField3 v1;
 	VectorField3 v2;
 	ScalarField3 x;
-	cout << "3D-test\n" << endl;
+	cout << "3D - level 8 test, fully populated 256x256x256 box\n" << endl;
 
 	v1.createEntireLevel(8);
 	v2.createEntireLevel(8);
 
-	cout << sizeof(Vec3) << endl;
+	int v3size = sizeof(Vec3);
+	cout << "Single vector3 size: " << v3size << "bytes, nTop = " << v1.nElementsTop() << endl;
 	auto t1 = high_resolution_clock::now();
-	uint64_t count = 0;
-	for (auto e : v1) {
-		Vec3 vec({count + 1, count , -(data_t)count});
-		vec.normalize();
-		e.second = vec;
-		count++;
-	}
-	for (auto e : v2) {
-		Vec3 vec({count + 1, count , -(data_t)count});
-		vec.normalize();
-		e.second = vec;
-		count++;
-	}
+	Vec3 vec({1,2,3});
+	v1 = vec;
+	v2 = vec;
 	auto t2 = high_resolution_clock::now();
 	auto duration = duration_cast<milliseconds>(t2-t1).count();
 
-	cout << "Setting vectors of 2 complete level-8 fields took " << duration << "ms.\n";
+	double total_bytes_written = v3size * v1.nElements();
+	duration /= 2;
+	cout << "Setting vector field to a constant took " << duration << "ms.\n";
+	cout << "Throughput: " << (double)(total_bytes_written / duration * 1000) / 1024 / 1024 << " MByte/s\n";
 
+	t1 = high_resolution_clock::now();
+	v1.propagate();
+	v2.propagate();
+	t2 = high_resolution_clock::now();
+	duration = duration_cast<milliseconds>(t2-t1).count();
+	cout << "Propagating vector field of level 8 took " << duration /2 << "ms.\n";
 	t1 = high_resolution_clock::now();
 	x.merge<Vec3>(v1, v2, [](coord_t c, Vec3 v1v, Vec3 v2v)->data_t {
 		return v1v * v2v;

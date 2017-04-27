@@ -36,11 +36,13 @@ int main(int argc, char **argv) {
 	cout << "Operating on a complete 2D level 8 scalar field, X and Y scaled as unit-cube.\nPrints interpolation coeffs for a provided coord.\n";
 
 	ScalarField2 x;
-	x.createEntireLevel(8);
+	x.createEntireLevel(4);
 	x.bracket_behavior = ScalarField2::BR_INTERP;
+	x.coarse(h2.createFromPosition(2,{0.5,0.5}));
 	for (auto e : x) {
-		e.second = h2.getPosition(e.first)[0];	// Set the value of the field to the X Cartesian-coord
+		e.second = h2.GetLevel(e.first) < 4 ? 0 : 1;//h2.getPosition(e.first)[0];	// Set the value of the field to the X Cartesian-coord
 	}
+	x.propagate();
 	while (true) {
 		level_t level;
 		H2::pos_t uc;

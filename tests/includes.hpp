@@ -80,7 +80,7 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 		H2::unscaled_t pos = hcs.getUnscaled(c);
 		int x = pos[0];
 		int y = pos[1];
-		buffer[x + width * y] = field[c];
+		buffer[x + width * y] = field.get(c, false);
 	}
 	data_t f_min = buffer.min();
 	data_t f_max = buffer.max();
