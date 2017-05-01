@@ -753,10 +753,10 @@ private:
 	    	map_iter = field->data.begin();
 	    	if (only_level >= 0) {
 	    		while (map_iter != field->data.end()) {
-	    			++map_iter;
 		    		coord_t start = map_iter->first;
 		    		if (field->hcs.GetLevel(start) == only_level)
 		    			break;
+	    			++map_iter;
 	    		}
 	    	}
 	    	at_end = !(map_iter != field->data.end());
