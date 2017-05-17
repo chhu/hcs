@@ -397,6 +397,37 @@ private:
 
 	}
 
+	void subHarmonics() {
+		// Use the <greater> sorting from our data map that will deliver top-level coords first
+		// We don't store the averaged values immediately to avoid excessive lower_bound() lookups
+		vector<tuple<coord_t, DTYPE> > lower_level_cache;
+		level_t highest = getHighestLevel();
+
+		for (auto& entry : data) {
+			level_t current_level = hcs.GetLevel(entry.first);
+			if (current_level < highest) {
+				// We have reached the next lower level. Write cache.
+				for (auto& centry : lower_level_cache)
+					getDirect(std::get<0>(centry)) = std::get<1>(centry);
+				lower_level_cache.clear();
+				highest = current_level;
+			}
+			if (highest == 0) // 0-Bucket has only one coord that should have been filled.
+				break;
+			// A Bucket must have a multiple of hcs.parts
+			Bucket *b = entry.second;
+			for (coord_t c = b->start; c <= b->end; c += hcs.parts) {
+				DTYPE total = 0;
+				for (int j = 0; j < hcs.parts; j++)
+					total += b->get(c + j);
+				total /= hcs.parts;
+				for (int j = 0; j < hcs.parts; j++)
+					b->get(c + j) -= total;
+
+				lower_level_cache.push_back(make_tuple(hcs.ReduceLevel(c), total));
+			}
+		}
+	}
 
 	size_t coeff_up_count, coeff_down_count;
 	// Return interpolation coeffs and their associated >existing< coords.

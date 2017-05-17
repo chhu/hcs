@@ -241,6 +241,9 @@ public:
 		return result;
 	}
 
+	data_t getDistance(coord_t coord, uint8_t direction) {
+		return (2 * scales[direction]) / data_t(1U << GetLevel(coord));
+	}
 
 	// Returns the iteration level of this coordinate. Higher level coordinates carry more information.
 	// CAREFUL: The Special bit is not cleared here for performance reasons!
