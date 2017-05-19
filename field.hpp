@@ -32,7 +32,7 @@ private:
 	class iterator; // The public iterator class
 	class dual_iterator; // The public iterator class
 
-	Field(char symbol, HCSTYPE hcs_) : symbol(symbol), _current(NULL), hcs(hcs_), bracket_behavior(BR_THROW) {
+	Field(char symbol, HCSTYPE hcs_) : symbol(symbol), _current(NULL), _level_current{NULL}, hcs(hcs_), bracket_behavior(BR_THROW) {
 		coeff_up_count = coeff_down_count = 0;
 		// Create single-value center bucket, the only coordinate that always exists. [0]
 		data[0] = new Bucket(0, 0);
@@ -65,6 +65,8 @@ private:
 			bucket.second = new Bucket(*(bucket.second)); // Calls implicit copy constructor of Bucket.
 		}
 		_current = NULL;
+		for (int i = 0; i < 64; i++)
+			_level_current[i] = NULL;
 	}
 
 	// Because we "new"d Buckets, we need to release them.
@@ -120,7 +122,7 @@ private:
 	// The last successful bucket of a exists() query.
 	// Saves a lot of calls to map.lower_bound() which is expensive
 	Bucket*	_current;
-
+	Bucket* _level_current[64];
 
  public:
 
@@ -186,15 +188,11 @@ private:
 	// if it is not TLC, return value anyway. To retrieve proper values from non-TLC
 	// call propagate() first
 	DTYPE get(coord_t coord, bool use_non_top = true) {
-		//if (exists(coord)) {
-		//	return _current->get(coord);
-		//}
 		DTYPE result = 0;
 		get(coord, result, use_non_top);
 		return result;
 	}
 
-	//map<coord_t, DTYPE> upscale_cache;
 	void get(coord_t coord, DTYPE& result, bool use_non_top = true) {
 		if (hcs.IsBoundary(coord)) {
 			uint8_t boundary_index = hcs.GetBoundaryDirection(coord);
@@ -206,7 +204,7 @@ private:
 
 		}
 		if (exists(coord)) {
-			if (use_non_top || isTop(coord)) {
+			if (use_non_top || _current->isTop(coord)) {
 				result += _current->get(coord);
 				return;
 			} else {
@@ -727,14 +725,29 @@ private:
 	//  ScalarField2 v2x('x', &h2);
 	//  v2x.convert<Tensor1<data_t, 2> >(v2, [](Tensor1<data_t, 2> t2)->data_t {return t2.length();});
 	template <typename DTYPE2>
-	void convert(const Field<DTYPE2, HCSTYPE> &f, function<DTYPE(coord_t, DTYPE2&)> convert) {
+	void convert(Field<DTYPE2, HCSTYPE> &f, function<DTYPE(coord_t, DTYPE2&)> convert_fn) {
 		clear();
 		for (auto e : f.data) {
 			auto *b = e.second;
 			Bucket *bn = new Bucket(b->start, b->end);
 			bn->top = b->top;
 			for (coord_t c = bn->start; c <= bn->end; c++)
-				bn->get(c) = convert(c, b->get(c));
+				bn->get(c) = convert_fn(c, b->get(c));
+			data[b->start] = bn;
+		}
+	}
+
+	// Clears the field and takes the same coordinate structure as the provided field, without copying their
+	// values. The provided field may have a different DTYPE. The newly created coords are initialized with zero.
+	template <typename DTYPE2>
+	void takeStructure(Field<DTYPE2, HCSTYPE> &f) {
+		clear();
+		for (auto e : f.data) {
+			auto *b = e.second;
+			Bucket *bn = new Bucket(b->start, b->end);
+			bn->top = b->top;
+			for (coord_t c = bn->start; c <= bn->end; c++)
+				bn->get(c) = 0;
 			data[b->start] = bn;
 		}
 	}
@@ -745,14 +758,14 @@ private:
 	// merger function must have 2 arguments of foreign DTYPE2& and return DTYPE.
 	// The resulting structure will be the one of f1!
 	template <typename DTYPE2>
-	void merge(const Field<DTYPE2, HCSTYPE> &f1, Field<DTYPE2, HCSTYPE> &f2, function<DTYPE(coord_t, DTYPE2&, DTYPE2)> merger) {
+	void merge(const Field<DTYPE2, HCSTYPE> &f1, Field<DTYPE2, HCSTYPE> &f2, function<DTYPE(coord_t, DTYPE2&, DTYPE2)> merge_fn) {
 		clear();
 		for (auto e : f1.data) {
 			auto *b = e.second;
 			Bucket *bn = new Bucket(b->start, b->end);
 			bn->top = b->top;
 			for (coord_t c = bn->start; c <= bn->end; c++)
-				bn->get(c) = merger(c, b->get(c), f2.get(c));
+				bn->get(c) = merge_fn(c, b->get(c), f2.get(c));
 			data[b->start] = bn;
 		}
 	}
