@@ -1,6 +1,51 @@
 #include "includes.hpp"
 #include "solver.hpp"
 
+
+// Dimension-independent gradient operator
+template<size_t dimension>
+Field<Tensor1<data_t, dimension>, HCS<dimension> > grad(Field<data_t, HCS<dimension> > &f) {
+	typedef Tensor1<data_t, dimension> Vec;
+	typedef HCS<dimension> HX;
+	typedef Field<Vec, HX> VectorField;
+
+	VectorField result;
+	HX &h = f.hcs;
+
+	// strange calling convention because template depends now on another template
+	result.template convert<data_t>(f, [&h, &f](coord_t c, data_t &val)->Vec {
+
+		Vec gradient;
+		if (!f.isTop(c))
+			return gradient;
+
+		// Gradient calculation with finite-difference stencil
+		level_t l = h.GetLevel(c);
+		data_t dist = 4 * (h.scales[0] / data_t(1U << l)); // neighbor distance at that level, assuming all scales equal, * 2 because gradient is 2nd order
+		for (int n_idx = 0; n_idx < h.parts; n_idx++) {  // Traverse all neighbors
+			coord_t c_ne = h.getNeighbor(c, n_idx);
+			data_t ne_val = f.get(c_ne); // will respect boundary condition
+			gradient[n_idx >> 1] += (n_idx & 1 ? -ne_val : ne_val) / dist;
+		}
+		return gradient;
+	});
+	return result;
+}
+
+ScalarField2 grad_mag(ScalarField2 &f) {
+	ScalarField2 result;
+	VectorField2 grad_f = grad<2>(f);
+	result.convert<Vec2>(grad_f, [](coord_t c, Vec2 &g)->data_t{
+		return g.magnitude();
+	});
+	result.propagate();
+	return result;
+}
+
+void grad_mag_refinement(ScalarField2 &f, data_t sensitivity, level_t lowest_level, level_t highest_level) {
+
+}
+
 int main(int argc, char **argv) {
 
 	#ifdef __BMI2__
@@ -28,6 +73,8 @@ int main(int argc, char **argv) {
 	ScalarField c;
 	VectorField v;
 
+	//cout << Vec2(hcs.getDirectionNormal(0)) << endl;return 0;
+
 	c.createEntireLevel(max_level);
 	v.createEntireLevel(vel_level);
 
@@ -53,7 +100,8 @@ int main(int argc, char **argv) {
 	}
 	c.propagate();
 
-	int n_refinements = 1000;
+
+	int n_refinements = 0;
 	// Randomly coarse into a coordinate.
 	// Create random structure between level 5 and 10 coords.
 	for (int i = 0; i < n_refinements; i++) {
@@ -73,6 +121,11 @@ int main(int argc, char **argv) {
 
 
 	write_pgm("c_init.pgm", c, max_level);
+
+	ScalarField2 gm = grad_mag(c);
+	write_pgm("gm_init.pgm", gm, max_level);
+return 0;
+
 	Matrix<data_t, ScalarField> M;
 	Solver<data_t, ScalarField> solver;
 
@@ -125,12 +178,12 @@ int main(int argc, char **argv) {
 	// Benchmark mat-mul
 	ScalarField a = c;
 	auto t1 = high_resolution_clock::now();
-	for (int i = 0; i < 100; i++) {
+	for (int i = 0; i < 10; i++) {
 		M.mul(c, a);
 	}
 	auto t2 = high_resolution_clock::now();
 	auto duration = duration_cast<milliseconds>(t2-t1).count();
-	cout << "100 mul " << " took " << duration << "ms.\n";
+	cout << "10 mul " << " took " << duration << "ms.\n";
 
 	// Run 1000 time steps
 	for (int step = 1; step < 1000; step++) {

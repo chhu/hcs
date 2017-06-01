@@ -722,8 +722,8 @@ private:
     // Empties "this" first.
     // This example turns a "vector" field into a scalar field marking the
     // length of each vector:
-	//  ScalarField2 v2x('x', &h2);
-	//  v2x.convert<Tensor1<data_t, 2> >(v2, [](Tensor1<data_t, 2> t2)->data_t {return t2.length();});
+	//  ScalarField2 vecmag;
+	//  vecmag.convert<Tensor1<data_t, 2> >(v2, [](coord_t c, Tensor1<data_t, 2> &t2)->data_t {return t2.length();});
 	template <typename DTYPE2>
 	void convert(Field<DTYPE2, HCSTYPE> &f, function<DTYPE(coord_t, DTYPE2&)> convert_fn) {
 		clear();
@@ -947,6 +947,7 @@ private:
 			cout << "Bucket: N = " << b.second->data.size() << " N_top = " << n_top << " Start: " << hcs.toString(b.second->start) << " End: " << hcs.toString(b.second->end) <<endl;
 		}
 	}
+
   private:
 
 	// unconditionally remove without checking hierarchy, start until start + part_mask get thrown away.

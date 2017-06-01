@@ -10,8 +10,8 @@ int main(int argc, char **argv) {
 	ScalarField2 x2;
 	VectorField2 v2;
 
-	v2.createEntireLevel(8);  // 2D box with 256x256 vectors
-	x2.createEntireLevel(8);
+	v2.createEntireLevel(9);  // 2D box with 256x256 vectors
+	x2.createEntireLevel(9);
 	// Generate simple divergence free vector field {Y, -X}
 	for (auto e : v2) { 
 		H2::pos_t pos = h2.getPosition(e.first);
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 	
 	auto t1 = high_resolution_clock::now();
 	for (int i = 0; i < 100; i++) {
-		v2[h2.createFromUnscaled(8, {127, 127})] = Vec2({100,i}); // create some divergence in the center
+		//v2[h2.createFromUnscaled(8, {127, 127})] = Vec2({100,i}); // create some divergence in the center
 		
 		// Use convert to calculate explicit divergence
 		//x2.takeStructure<Vec2>(v2);
@@ -39,16 +39,15 @@ int main(int argc, char **argv) {
 
 			level_t l = h2.GetLevel(c);
 			data_t dist = 2 * (h2.scales[0] / data_t(1U << l)); // neighbor distance at that level, assuming all scales equal
-			data_t vol = dist * dist;  // dist is also face area and therefore dist*dist is the volume of the cell
+			data_t vol = pow(dist, 2);  // dist is also face area and therefore dist*dist is the volume of the cell
 			data_t divergence = 0;
 			for (int n_idx = 0; n_idx < h2.parts; n_idx++) {  // Traverse all 2^D neighbors
 				coord_t c_ne = h2.getNeighbor(c, n_idx);
 				if (h2.IsBoundary(c_ne))
 					continue;	// assume zero flux at BC
-				Vec2 ne_val = v2.getDirect(c_ne); // If this coordinate does not exist, an interpolated value is returned
-				Vec2 normal = Vec2(v2.hcs.GetBoundaryDirection(n_idx));
+				Vec2 ne_val = v2.getDirect(c_ne); // convert() ensures that c exists in v2.
+				Vec2 normal = Vec2(v2.hcs.getDirectionNormal(n_idx));
 				Vec2 interp = (t2  + ne_val) * 0.5; // The vector at the face
-				//divergence += ne_val.x + normal.y + t2.x + interp.x;//
 				divergence += (interp * normal) * (dist / vol);
 			}
 			return divergence;
@@ -60,7 +59,7 @@ int main(int argc, char **argv) {
 
 	// Write divergence as grey-scale image
 	x2.propagate();
-	write_pgm("test4.pgm", x2, 8);
+	write_pgm("test4.pgm", x2, 9);
 
 	// turn vector field into scalar field containing only x (or u) component
 	x2.convert<Vec2>(v2, [](coord_t c, Vec2& t2)->data_t {

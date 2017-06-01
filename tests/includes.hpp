@@ -104,6 +104,22 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 	f.close();
 }
 
+// Writes a PGM with the resolution of the highest level found in field, marking the level of each TL coord.
+void write_pgm_level(string filename, ScalarField2 &field) {
+	level_t highest = field.getHighestLevel();
+	coord_t c_lo = field.hcs.createFromUnscaled(highest, {0,0});
+	coord_t c_hi = c_lo + (1U << highest) * (1U << highest);
+	ScalarField2 level_field;
+	level_field.createEntireLevel(highest);
+	for (coord_t c = c_lo; c < c_hi; c++) {
+		coord_t cc = c;
+		while (!field.exists(cc))
+			cc = field.hcs.ReduceLevel(cc);
+		level_field[c] = field.hcs.GetLevel(cc);
+	}
+	write_pgm(filename, level_field, highest);
+}
+
 void write_txt(string filename, ScalarField1 &field, bool top_only = true) {
 	ofstream f(filename);
 	auto& hcs = field.hcs;

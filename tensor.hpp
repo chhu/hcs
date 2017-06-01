@@ -55,6 +55,8 @@ public:
 
 	T norm()			  		{ return (*this) * (*this);		}
 	T length()					{ return sqrt(norm());			}
+	T magnitude()				{ return sqrt(norm());			}
+	T mag()						{ return sqrt(norm());			}
 	void normalize()			{ (*this) *= 1./length(); 		}
 	Tensor1<T, D> normalized()	{ return Tensor1<T, D>((*this) /= length()); }
 
