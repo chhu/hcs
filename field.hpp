@@ -365,7 +365,7 @@ private:
 	}
 
 	// Average all non-top coords from top-level
-	void propagate() {
+	void propagate(bool max = false) {
 		// Use the <greater> sorting from our data map that will deliver top-level coords first
 		// We don't store the averaged values immediately to avoid excessive lower_bound() lookups
 		vector<tuple<coord_t, DTYPE> > lower_level_cache;
@@ -386,9 +386,14 @@ private:
 			Bucket *b = entry.second;
 			for (coord_t c = b->start; c <= b->end; c += hcs.parts) {
 				DTYPE total = 0;
-				for (int j = 0; j < hcs.parts; j++)
-					total += b->get(c + j);
-				total /= hcs.parts;
+				if (max) {
+					for (int j = 0; j < hcs.parts; j++)
+						total = std::max(total, b->get(c + j));
+				} else {
+					for (int j = 0; j < hcs.parts; j++)
+						total += b->get(c + j);
+					total /= hcs.parts;
+				}
 				lower_level_cache.push_back(make_tuple(hcs.ReduceLevel(c), total));
 			}
 		}
@@ -678,7 +683,8 @@ private:
 	// isTop is not copied because of assumption of equal structure
 	Field &operator=(const Field& f){
 		//cout << "XCOPY\n";
-		assert(data.size() == f.data.size());
+		assert(("= Operator would alter structure. if this is intended, call takeStructure(x) first!",
+				data.size() == f.data.size()));
 		auto iter_this = data.begin();
 		auto iter_f = f.data.begin();
 		while (iter_this != data.end()) {
@@ -717,26 +723,6 @@ private:
     Field<DTYPE, HCSTYPE>& operator+= (const DTYPE& val) { for (auto e : (*this)) e.second += val; return *this;}
     Field<DTYPE, HCSTYPE>& operator-= (const DTYPE& val) { for (auto e : (*this)) e.second -= val; return *this;}
 
-    // Converts a Field with another DTYPE according to convert function.
-    // The convert function must have a single argument of the foreign DTYPE2 and return DTYPE.
-    // Empties "this" first.
-    // This example turns a "vector" field into a scalar field marking the
-    // length of each vector:
-	//  ScalarField2 vecmag;
-	//  vecmag.convert<Tensor1<data_t, 2> >(v2, [](coord_t c, Tensor1<data_t, 2> &t2)->data_t {return t2.length();});
-	template <typename DTYPE2>
-	void convert(Field<DTYPE2, HCSTYPE> &f, function<DTYPE(coord_t, DTYPE2&)> convert_fn) {
-		clear();
-		for (auto e : f.data) {
-			auto *b = e.second;
-			Bucket *bn = new Bucket(b->start, b->end);
-			bn->top = b->top;
-			for (coord_t c = bn->start; c <= bn->end; c++)
-				bn->get(c) = convert_fn(c, b->get(c));
-			data[b->start] = bn;
-		}
-	}
-
 	// Clears the field and takes the same coordinate structure as the provided field, without copying their
 	// values. The provided field may have a different DTYPE. The newly created coords are initialized with zero.
 	template <typename DTYPE2>
@@ -752,21 +738,37 @@ private:
 		}
 	}
 
+    // Converts a Field with another DTYPE according to convert function. The structure of "this" remains.
+    // The convert function must have a single argument of the foreign DTYPE2 and return DTYPE.
+    // Empties "this" first.
+    // Calling convention:
+    //	target_field.convert< source_data_type[not Field-type!] >(source_field,
+    //					[](coord_t, source_field_type) { return target_data_type;});
+    // This example turns a "vector" field into a scalar field marking the
+    // length of each vector:
+	//  ScalarField2 vecmag;
+	//  vecmag.convert<Tensor1<data_t, 2> >(v2, [](coord_t c, VectorField2 &source)->data_t {return source.get(c).length();});
+	template <typename DTYPE2>
+	void convert(Field<DTYPE2, HCSTYPE> &source, function<DTYPE(coord_t, Field<DTYPE2, HCSTYPE> &)> convert_fn) {
+
+		for (auto it = begin(true); it != end(); ++it) {
+			coord_t own_coord = (*it).first;
+			(*it).second = convert_fn(own_coord, source);
+		}
+
+	}
+
 	// Merge 2 fields with possible foreign data type into "this".
 	// Arbitrary operations possible through the converter function.
-	// clear() is called first so everything in "this" will be deleted.
+	// The structure of "this" remains.
 	// merger function must have 2 arguments of foreign DTYPE2& and return DTYPE.
 	// The resulting structure will be the one of f1!
 	template <typename DTYPE2>
-	void merge(const Field<DTYPE2, HCSTYPE> &f1, Field<DTYPE2, HCSTYPE> &f2, function<DTYPE(coord_t, DTYPE2&, DTYPE2)> merge_fn) {
-		clear();
-		for (auto e : f1.data) {
-			auto *b = e.second;
-			Bucket *bn = new Bucket(b->start, b->end);
-			bn->top = b->top;
-			for (coord_t c = bn->start; c <= bn->end; c++)
-				bn->get(c) = merge_fn(c, b->get(c), f2.get(c));
-			data[b->start] = bn;
+	void merge(Field<DTYPE2, HCSTYPE> &source1, Field<DTYPE2, HCSTYPE> &source2, function<DTYPE(coord_t, DTYPE2, DTYPE2)> merge_fn) {
+
+		for (auto it = begin(true); it != end(); ++it) {
+			coord_t own_coord = (*it).first;
+			(*it).second = merge_fn(own_coord, source1.get(own_coord), source2.get(own_coord));
 		}
 	}
 
@@ -777,6 +779,7 @@ private:
 		data.clear();
 		data[0] = new Bucket(0, 0);
 		data[0]->setTop(0, true);
+		_current = NULL;
 	}
 
 	// Iterator methods & class

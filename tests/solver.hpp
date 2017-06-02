@@ -25,6 +25,10 @@ public:
 		coeff_cache.clear();
 	}
 
+	void clearCache() {
+		coeff_cache.clear();
+	}
+
 	void mul(FTYPE& x, FTYPE& result) {
 		for (auto dual_it = x.begin(&result, true); dual_it != x.end(); ++dual_it) {
 			coord_t coord = get<0>(*dual_it);

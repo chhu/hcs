@@ -2,7 +2,6 @@
 
 int main(int argc, char **argv) {
 
-
 	// Test suite
 	H3 h3;
 
@@ -13,6 +12,7 @@ int main(int argc, char **argv) {
 
 	v1.createEntireLevel(8);
 	v2.createEntireLevel(8);
+	x.takeStructure(v1);
 
 	int v3size = sizeof(Vec3);
 	cout << "Single vector3 size: " << v3size << "bytes, nTop = " << v1.nElementsTop() << endl;
@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
 	cout << "Merging dot product into new ScalarField of level 8 took " << duration << "ms.\n";
 
 	t1 = high_resolution_clock::now();
-	x.convert<Vec3>(v1,[](coord_t c, Vec3 v1v)->data_t {
-		return v1v.length();
+	x.convert<Vec3>(v1,[](coord_t c, VectorField3 &s)->data_t {
+		return s.get(c).length();
 	});
 
 	t2 = high_resolution_clock::now();

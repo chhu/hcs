@@ -63,6 +63,69 @@ typedef Field<Vec2, H2> VectorField2; // Vector field 2D / 3D
 typedef Field<Vec3, H3> VectorField3;
 typedef Field<Vec3, H4> VectorField4;
 
+
+// Dimension-independent gradient operator
+// Takes a scalar field as input and returns the vector field
+// Example:  VectorField3 grad_of_x = grad<3>(x);  // x is instance of ScalarField3
+template<size_t dimension>
+void grad(Field<data_t, HCS<dimension> > &source, Field<Tensor1<data_t, dimension>, HCS<dimension> > &result) {
+	typedef Tensor1<data_t, dimension> Vec;
+	typedef HCS<dimension> HX;
+	typedef Field<Vec, HX> VectorField;
+	typedef Field<data_t, HX> ScalarField;
+
+	// strange calling convention because template depends now on another template
+	result.template convert<data_t>(source, [](coord_t c, ScalarField &source)->Vec {
+
+		HX &h = source.hcs;
+		Vec gradient;
+
+		// Gradient calculation with finite-difference stencil
+		level_t l = h.GetLevel(c);
+		data_t dist = 4 * (h.scales[0] / data_t(1U << l)); // neighbor distance at that level, assuming all scales equal, * 2 because gradient is 2nd order
+		for (int n_idx = 0; n_idx < h.parts; n_idx++) {  // Traverse all neighbors
+			coord_t c_ne = h.getNeighbor(c, n_idx);
+			data_t ne_val = source.get(c_ne); // will respect boundary condition
+			gradient[n_idx >> 1] += (n_idx & 1 ? -ne_val : ne_val) / dist;
+		}
+		return gradient;
+	});
+	result.propagate();
+}
+
+// Dimension-independent gradient operator
+// Takes a scalar field as input and returns the vector field
+// Example:  VectorField3 grad_of_x = grad<3>(x);  // x is instance of ScalarField3
+template<size_t dimension>
+void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data_t, HCS<dimension> > &result) {
+	typedef Tensor1<data_t, dimension> Vec;
+	typedef HCS<dimension> HX;
+	typedef Field<data_t, HX> ScalarField;
+	typedef Field<Vec, HX> VectorField;
+
+	// strange calling convention because template depends now on another template
+	result.template convert<Vec>(source, [](coord_t c, VectorField2 &source)->data_t {
+
+		HX &h = source.hcs;
+		data_t divergence = 0;
+
+		// Gradient calculation with finite-difference stencil
+		level_t l = h.GetLevel(c);
+		data_t dist = 4 * (h.scales[0] / data_t(1U << l)); // neighbor distance at that level, assuming all scales equal, * 2 because gradient is 2nd order
+		for (int n_idx = 0; n_idx < h.parts; n_idx++) {  // Traverse all neighbors
+			coord_t c_ne = h.getNeighbor(c, n_idx);
+			data_t ne_val = source.get(c_ne)[n_idx >> 1]; // will respect boundary condition
+			divergence += (n_idx & 1 ? -ne_val : ne_val) / dist;
+		}
+		return divergence;
+	});
+	result.propagate();
+}
+
+
+
+
+
 // Write a 2D scalar field to a PGM. Scales automatically.
 // Level determines resolution.
 void write_pgm(string filename, ScalarField2 &field, level_t level) {
@@ -80,7 +143,7 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 		H2::unscaled_t pos = hcs.getUnscaled(c);
 		int x = pos[0];
 		int y = pos[1];
-		buffer[x + width * y] = field.get(c, false);
+		buffer[x + width * y] = field.get(c, true);
 	}
 	data_t f_min = buffer.min();
 	data_t f_max = buffer.max();

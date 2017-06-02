@@ -2,47 +2,39 @@
 #include "solver.hpp"
 
 
-// Dimension-independent gradient operator
-template<size_t dimension>
-Field<Tensor1<data_t, dimension>, HCS<dimension> > grad(Field<data_t, HCS<dimension> > &f) {
-	typedef Tensor1<data_t, dimension> Vec;
-	typedef HCS<dimension> HX;
-	typedef Field<Vec, HX> VectorField;
 
-	VectorField result;
-	HX &h = f.hcs;
-
-	// strange calling convention because template depends now on another template
-	result.template convert<data_t>(f, [&h, &f](coord_t c, data_t &val)->Vec {
-
-		Vec gradient;
-		if (!f.isTop(c))
-			return gradient;
-
-		// Gradient calculation with finite-difference stencil
-		level_t l = h.GetLevel(c);
-		data_t dist = 4 * (h.scales[0] / data_t(1U << l)); // neighbor distance at that level, assuming all scales equal, * 2 because gradient is 2nd order
-		for (int n_idx = 0; n_idx < h.parts; n_idx++) {  // Traverse all neighbors
-			coord_t c_ne = h.getNeighbor(c, n_idx);
-			data_t ne_val = f.get(c_ne); // will respect boundary condition
-			gradient[n_idx >> 1] += (n_idx & 1 ? -ne_val : ne_val) / dist;
-		}
-		return gradient;
-	});
-	return result;
-}
-
-ScalarField2 grad_mag(ScalarField2 &f) {
+ScalarField2 criteria(ScalarField2 &f) {
 	ScalarField2 result;
-	VectorField2 grad_f = grad<2>(f);
-	result.convert<Vec2>(grad_f, [](coord_t c, Vec2 &g)->data_t{
-		return g.magnitude();
+	VectorField2 grad_f;
+	grad_f.takeStructure(f);
+	result.takeStructure(f);
+	grad<2>(f, grad_f);
+	div<2>(grad_f, result);
+	result.convert<data_t>(result, [](coord_t c, ScalarField2 &f)->data_t{
+		return pow(f.get(c) * 1./(512.*512.), 2);//1/pow(1U << f.hcs.GetLevel(c), 2);
 	});
 	result.propagate();
 	return result;
 }
 
-void grad_mag_refinement(ScalarField2 &f, data_t sensitivity, level_t lowest_level, level_t highest_level) {
+void refinement(ScalarField2 &f, ScalarField2 &criteria, data_t sensitivity, level_t lowest_level, level_t highest_level, coord_t start = 0) {
+	H2 &h = f.hcs;
+	level_t current = h.GetLevel(start);
+	data_t critical = criteria.get(start, true) * sensitivity;
+//	cout << h.toString(start) << " CRIT: " << critical << endl;
+	bool keep = critical >= 1 || current < lowest_level;
+	if (keep) {
+		if (!f.exists(start))
+			f.refineTo(start);
+		if (current == highest_level)
+			return;
+		for (uint16_t i = 0; i < h.parts; i++) {
+			coord_t next = h.IncreaseLevel(start, i);
+			refinement(f, criteria, sensitivity, lowest_level, highest_level, next);
+		}
+	} else {
+		f.coarse(start);
+	}
 
 }
 
@@ -100,8 +92,8 @@ int main(int argc, char **argv) {
 	}
 	c.propagate();
 
-
-	int n_refinements = 0;
+/*
+	int n_refinements = 10;
 	// Randomly coarse into a coordinate.
 	// Create random structure between level 5 and 10 coords.
 	for (int i = 0; i < n_refinements; i++) {
@@ -112,25 +104,34 @@ int main(int argc, char **argv) {
 		coord_t c2 = hcs.createFromPosition(l, {x, y});
 		c.coarse(c2);
 	}
-
+*/
 	// make v stress-free at all boundaries
 	for (auto &boundary : v.boundary)
 		boundary = [](VectorField *self, coord_t c)->Vec {
 			return self->get(self->hcs.removeBoundary(c)); // Neumann BC, derivative == 0
 		};
 
+	data_t sense = 256;
 
 	write_pgm("c_init.pgm", c, max_level);
 
-	ScalarField2 gm = grad_mag(c);
-	write_pgm("gm_init.pgm", gm, max_level);
-return 0;
+
+	ScalarField2 gm = criteria(c);
+	//write_pgm("crit_init.pgm", gm, max_level);
+	gm.propagate(true);
+
+	refinement(c, gm, sense, min_level, max_level);
+	//write_pgm_level("ar.pgm", c);
+	c.propagate();
+	//write_pgm("c1.pgm", c, max_level);
+
+
 
 	Matrix<data_t, ScalarField> M;
 	Solver<data_t, ScalarField> solver;
 
 	data_t time = 0;
-	data_t time_step = 0.01;
+	data_t time_step = 0.001;
 
 	// Implicit first-order upwind finite-volume stencil, no diffusion
 	M.setStencil([&v, &time_step](coord_t coord, ScalarField &x)->ScalarField::coeff_map_t {
@@ -141,9 +142,6 @@ return 0;
 
 		data_t result = 0;
 		Vec vel = v.get(coord);	// interpolated velocity for coord
-		if (l < max_level) {
-			cout << x.hcs.toString(coord) << " " << vel << endl;
-		}
 		ScalarField::coeff_map_t coeffs;
 		for (int neighbor_direction = 0; neighbor_direction < x.hcs.parts; neighbor_direction++) {
 			coord_t ne_coord = x.hcs.getNeighbor(coord, neighbor_direction);
@@ -162,13 +160,7 @@ return 0;
 				if (flux < 0)
 					coeffs[e.first] += flux * e.second;
 			}
-			if (l < max_level) {
-				cout << neighbor_direction << " : " << face_vel << " " << flux << " " << endl;
-			}
 
-		}
-		if (l < max_level) {
-			cout << coeffs[coord] << endl;
 		}
 
 		coeffs[coord] += 1. / time_step;
@@ -188,15 +180,21 @@ return 0;
 	// Run 1000 time steps
 	for (int step = 1; step < 1000; step++) {
 		auto t1 = high_resolution_clock::now();
-
+		M.clearCache();
 		ScalarField rhs = c * 1. / time_step;  // right-hand-side or b-vector. Solve M * c = rhs
 		int its = solver.solve(M, c, rhs, 1000, 1e-8, 1e-14);  // ... with BiCGStab
 		c.propagate();
 		write_pgm("c_" + to_string(step) + ".pgm", c, max_level);
+		ScalarField2 gm = criteria(c);
+		write_pgm("p_" + to_string(step) + ".pgm", gm, max_level);
+		gm.propagate(true);
+		refinement(c, gm, sense, min_level, max_level);
+		write_pgm_level("l_" + to_string(step) + ".pgm", c);
+		c.propagate();
 
 		auto t2 = high_resolution_clock::now();
 		auto duration = duration_cast<milliseconds>(t2-t1).count();
-		cout << "Time-step " << step << " took " << its << " iterations and " << duration << "ms.\n";
+		cout << "Time-step " << step << " took " << its << " iterations and " << duration << "ms. Elements: " << c.nElementsTop() << endl;
 	}
 
 }

@@ -53,10 +53,10 @@ public:
 	Tensor1<T, D>(T s) { for (auto &e : value) e = s;}
 
 
-	T norm()			  		{ return (*this) * (*this);		}
-	T length()					{ return sqrt(norm());			}
-	T magnitude()				{ return sqrt(norm());			}
-	T mag()						{ return sqrt(norm());			}
+	T norm() const		  		{ return (*this) * (*this);		}
+	T length() const			{ return sqrt(norm());			}
+	T magnitude() const			{ return sqrt(norm());			}
+	T mag()	const				{ return sqrt(norm());			}
 	void normalize()			{ (*this) *= 1./length(); 		}
 	Tensor1<T, D> normalized()	{ return Tensor1<T, D>((*this) /= length()); }
 
@@ -138,6 +138,9 @@ template <typename T, unsigned char D> Tensor1<T, D> operator- (const T& val, co
 { Tensor1<T, D> result = rhs; result -= val; return result;}
 template <typename T, unsigned char D> Tensor1<T, D> operator- (const Tensor1<T, D>& lhs, const T& val)
 { Tensor1<T, D> result = lhs; result -= val; return result;}
+
+template <typename T, unsigned char D> bool operator< (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
+{ return lhs.mag() < rhs.mag(); }
 
 /*
 template <typename T, unsigned char D> valarray<bool> operator== (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
