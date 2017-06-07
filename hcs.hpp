@@ -65,14 +65,23 @@
 
 #endif
 
-// Configured to store coordinate in 64 bit
+namespace hcs {
 
+// Configured to store coordinate in 64 bit
+// The uint type used limits the maximal level to store, also depending on how many dimensions you use.
 typedef uint64_t coord_t;
-#define HCS_COORD_BITS sizeof(uint64_t) * 8
-// With "level" at bits 63-58, allowing max of 31 levels.
-// This is optimal for 2D (28 levels), 3D (18), 4D (14) and 5D (11).
-// For 6+D, 60 (10) is optimal, 1D with 57 bits (58 levels).
-#define HCS_LEVEL_BIT 58
+
+
+
+#define HCS_COORD_BITS sizeof(coord_t) * 8
+
+// Configure in this routine the fastest way to count leading zeros of your coord_t.
+// This depends on compiler and CPU. The reference implementation is terribly slow.
+// Check out https://en.wikipedia.org/wiki/Find_first_set
+inline uint32_t __count_leading_zeros(coord_t c) {
+	return __builtin_clzll(c);
+};
+
 
 /*
  * Boundary coordinates
@@ -105,16 +114,15 @@ public:
 		// Initializes origin + scale
 		for (int d = 0; d < dimensions; d++)
 			center[d] = scales[d] = 0.5;	// makes 1x1x... box from 0-> 1
-		level_t level_max1 = (HCS_LEVEL_BIT - dimensions) / dimensions;
-		level_t level_max2 = 1U << (HCS_COORD_BITS - HCS_LEVEL_BIT - 1);
-		max_level = level_max1 < level_max2 ? level_max1 : level_max2;
+		max_level = (HCS_COORD_BITS - 2 - dimensions) / dimensions;
+		boundary_mask = ((1U << (dimensions + 1)) - 1) << (HCS_COORD_BITS - (dimensions + 1));
 		for (int d = 0; d < dimensions * 2; d += 2) {
 			coord_t single = ~(1U << (d / 2)) & part_mask;
 			successor_mask[d] = single;
 			for (level_t l = 1; l < max_level; l++)
 				successor_mask[d] |= single << (dimensions * l);
 			successor_mask[d + 1] = ~successor_mask[d];
-			bmi_mask[d >> 1] = successor_mask[d+1] & (((coord_t)1 << (HCS_LEVEL_BIT - dimensions)) - 1);
+			bmi_mask[d >> 1] = successor_mask[d+1] & ~boundary_mask;
 
 		}
 	}
@@ -129,6 +137,7 @@ public:
 	coord_t part_mask;  // A bit mask that covers a single level
 	level_t parts;		// How many directions has a single level (nodes on the H)
 
+	coord_t boundary_mask; // masks all bits representing boundary information
 	level_t max_level;	// The highest recursion depth (level) of this setup
 
 	array<coord_t, dimensions * 2> successor_mask;
@@ -146,14 +155,12 @@ public:
 
 	// If coord is marked as boundary, retrieve which boundary. (0 = X+, 1 = X-, 2= Y+ ...)
 	static coord_t GetBoundaryDirection(coord_t coord) {
-		return (coord << (HCS_COORD_BITS - HCS_LEVEL_BIT)) >> (HCS_COORD_BITS - dimensions);
+		return (coord << 1) >> (HCS_COORD_BITS - dimensions);
 	}
 
 	// If a coord is marked as boundary, retrieve the originating coord
 	coord_t removeBoundary(coord_t coord) {
-		coord &= ~(coord_t)0 >> 1;	// Clear Special bit
-		coord &= ~(part_mask << (HCS_LEVEL_BIT - dimensions));
-		return coord;
+		return coord & ~boundary_mask;
 	}
 
 	// Return neighbor in direction. 0=X+, 1=X-, 2=Y+, 3=Y-,...
@@ -192,46 +199,11 @@ public:
 		unscaled += direction & 1 ? -1 : 1;
 		if (unscaled >= max_coord) {
 			coord |= (coord_t)1 << (HCS_COORD_BITS - 1);
-			coord |= (coord_t)direction << (HCS_LEVEL_BIT - dimensions);
+			coord |= (coord_t)direction << (HCS_COORD_BITS - 2);
 		} else {
 			setSingleUnscaled(coord, l, direction >> 1, unscaled);
 		}
 		return coord;
-	}
-
-	// Original approach, slow but interesting.
-	coord_t getNeighbor3(coord_t coord, uint8_t direction) {
-		level_t l = GetLevel(coord);
-
-		// Are we looking in positive or negative direction (pos_ne) for neighbor in dimension d?
-		bool pos_ne = !(direction % 2);
-		level_t d = direction / 2;
-
-		coord_t result = coord;
-		const coord_t part_bit = 1U << d;
-		coord_t inverter_mask = part_bit ;
-
-		/* Fast exit route? */
-		if (pos_ne ^ bool(coord & part_bit)) {
-			result ^= part_bit;	// set bit or clear bit. done.
-			return result;	// Half of all neighbor-searches will end here
-		}
-
-		// We have to traverse back
-		level_t pcount = 1;
-		while (pcount < l && (!pos_ne ^ bool(result & (part_bit << (dimensions * pcount))))) {
-			pcount++;
-			inverter_mask <<= dimensions;
-			inverter_mask += part_bit;
-		}
-		if (pcount >= l) { // we hit the boundary, return special coord
-			result |= (coord_t)1 << (HCS_COORD_BITS - 1);
-			result |= (coord_t)direction << (HCS_LEVEL_BIT - dimensions);
-		} else {
-			result ^= inverter_mask;
-		}
-
-		return result;
 	}
 
 	// Returns a normal vector for the provided direction
@@ -248,26 +220,35 @@ public:
 	// Returns the iteration level of this coordinate. Higher level coordinates carry more information.
 	// CAREFUL: The Special bit is not cleared here for performance reasons!
 	static level_t GetLevel(coord_t coord) {
-		return (coord >> HCS_LEVEL_BIT);
+		return (HCS_COORD_BITS - 1 - __count_leading_zeros(coord)) / dimensions;
 	}
 
-	// Set the level of a coordinate
-	static void SetLevel(coord_t &coord, level_t level) {
-		//assert(level <= max_level);
-		coord &= ~(coord_t)0 >> (HCS_COORD_BITS - HCS_LEVEL_BIT);		// Zero level bits
-		coord |= ((coord_t)level << HCS_LEVEL_BIT);
+private:
+	// Turns the coordinate into an unconsistent state by removing the level-marker bit
+	static level_t RemoveLevel(coord_t &coord) {
+		level_t level_undivided = HCS_COORD_BITS - 1 - __count_leading_zeros(coord);
+#ifdef __BMI2__
+		coord = _bzhi_u64(coord, level_undivided);
+#else
+		coord = coord & ((1U << level_undivided ) - 1);
+#endif
+		return level_undivided / dimensions;
 	}
+
+
+	// Set the level-marker bit of a (raw) coordinate
+	static void SetLevel(coord_t &coord, level_t level) {
+		coord_t level_bit = 1U << (level * dimensions);
+		coord |= level_bit;
+	}
+
+public:
 
 	// Return the closest coordinate at the next lower level.
 	static coord_t ReduceLevel(coord_t coord) {
-		if (IsBoundary(coord))
+		if (IsBoundary(coord) || coord <= 1)
 			return coord;
-		level_t l = GetLevel(coord);
-		if (l <= 1)
-			return 0;
-		coord &= ~(coord_t)0 >> (HCS_COORD_BITS - HCS_LEVEL_BIT);		// Zero level bits
-		coord >>= dimensions;  // remove highest level
-		coord |= ((coord_t)(l - 1) << HCS_LEVEL_BIT); // set new level bits
+		coord >>= dimensions;  // remove highest level, marker bit wanders too
 		return coord;
 	}
 
@@ -275,11 +256,8 @@ public:
 	static coord_t IncreaseLevel(coord_t coord, uint8_t new_level_coord) {
 		if (IsBoundary(coord))
 			return coord;
-		assert(new_level_coord < (1U << dimensions));
-		level_t l = GetLevel(coord);
-		coord = coord << dimensions;
-		SetLevel(coord, l+1);   // will throw if l > max level
-		return coord + new_level_coord;
+		//assert(new_level_coord < (1U << dimensions));
+		return coord << dimensions + new_level_coord;
 	}
 
 
@@ -317,7 +295,7 @@ public:
 	// create a coord from a sub-coordinate list (a sub-coord is between 0 and (2^dimension)-1)
 	// Example: coord_t my_lower_left_third_level_coord = createFromList({0,0,0});
 	coord_t createFromList(initializer_list<uint8_t> sub_coords) {
-		coord_t result = 0;
+		coord_t result = 1;
 		for (auto sub : sub_coords)
 			result = IncreaseLevel(result, sub);
 		return result;
@@ -330,9 +308,7 @@ public:
 #ifdef __BMI2__
 		for (uint8_t dim = 0; dim < dimensions; dim++)
 			result |=  _pdep_u64(cart_coord[dim], bmi_mask[dim]);
-		SetLevel(result, level);
 #else
-		SetLevel(result, level);
 		level++;
 		while (level--) {
 			coord_t shift = (coord_t)1 << level;
@@ -340,15 +316,16 @@ public:
 				result |= (cart_coord[dim] & shift) << ((dimensions - 1) * level + dim);
 		}
 #endif
+		SetLevel(result, level);
 		return result;
 	}
 
 	// Alters a single unscaled Cartesian component
 	void setSingleUnscaled(coord_t &result, level_t level, uint8_t dim, uint32_t unscaled_coord) {
+		coord_t mask = bmi_mask[dim]
 		result &= ~bmi_mask[dim]; // clear bits for dim while leaving level bits untouched
 #ifdef __BMI2__
 		result |=  _pdep_u64(unscaled_coord, bmi_mask[dim]);
-		return;
 #else
 		level++;
 		while (level--) {
@@ -361,17 +338,16 @@ public:
 	// Inspired by https://github.com/Forceflow/libmorton/
 	unscaled_t getUnscaled(coord_t c) {
 		unscaled_t result {};
+		level_t level = RemoveLevel(c) + 1;
 #ifdef __BMI2__
 		for (uint8_t dim = 0; dim < dimensions; dim++)
 			result[dim] =  _pext_u64(c, bmi_mask[dim]);
 #else
-		level_t level = GetLevel(c) + 1;
-		coord_t one = 1;
 		while (level--) {
 			uint8_t shift_selector = dimensions * level;
 			uint8_t shiftback = (dimensions - 1) * level;
 			for (uint8_t dim = 0; dim < dimensions; dim++)
-				result[dim] |= (c & (one << (shift_selector + dim))) >> (shiftback + dim);
+				result[dim] |= (c & (1U << (shift_selector + dim))) >> (shiftback + dim);
 		}
 #endif
 		return result;
@@ -379,11 +355,11 @@ public:
 
 	// Inspired by https://github.com/Forceflow/libmorton/
 	uint32_t getSingleUnscaled(coord_t c, uint8_t dim) {
+		level_t level = RemoveLevel(c) + 1;
 #ifdef __BMI2__
 		return  _pext_u64(c, bmi_mask[dim]);
 #else
 		uint32_t result = 0;
-		level_t level = GetLevel(c) + 1;
 		coord_t one = 1;
 		while (level--) {
 			uint8_t shift_selector = dimensions * level;
@@ -397,7 +373,10 @@ public:
 	string toString(coord_t coord) {
 		stringstream result;
 		if (coord == 0)
+			return string("(SPECIAL)");
+		if (coord == 1)
 			return string("(CENTER)");
+
 		if (IsBoundary(coord)) {
 			result << "(BOUNDARY: " << (GetBoundaryDirection(coord)) << " ORIGIN : " << toString(removeBoundary(coord)) << ")";
 			return result.str();
@@ -416,6 +395,7 @@ public:
 
 };
 
+};
 
 
 
