@@ -9,9 +9,14 @@ ScalarField2 criteria(ScalarField2 &f) {
 	grad_f.takeStructure(f);
 	result.takeStructure(f);
 	grad<2>(f, grad_f);
-	div<2>(grad_f, result);
-	result.convert<data_t>(result, [](coord_t c, ScalarField2 &f)->data_t{
-		return pow(f.get(c) * 1./(512.*512.), 2);//1/pow(1U << f.hcs.GetLevel(c), 2);
+	result.convert<Vec2>(grad_f, [](coord_t c, VectorField2 &grad_f)->data_t {
+		data_t result = 0;
+		/*
+		for (uint16_t i = 0; i < grad_f.hcs.parts; i++) {
+			coord_t ne = grad_f.hcs.getNeighbor(c, i);
+			result = max(result, grad_f.get(ne).mag());
+		}*/
+		return sqrt(max(result, grad_f.get(c).mag()));
 	});
 	result.propagate();
 	return result;
@@ -111,8 +116,17 @@ int main(int argc, char **argv) {
 			return self->get(self->hcs.removeBoundary(c)); // Neumann BC, derivative == 0
 		};
 
-	data_t sense = 256;
-
+	data_t sense = 1;
+	string line = argv[1];
+	try
+	{
+	    sense = std::stod(line);
+	}
+	catch(std::invalid_argument)
+	{
+	    // can't convert
+	}
+	cout << "Sense: " << sense << endl;
 	write_pgm("c_init.pgm", c, max_level);
 
 
@@ -194,7 +208,7 @@ int main(int argc, char **argv) {
 
 		auto t2 = high_resolution_clock::now();
 		auto duration = duration_cast<milliseconds>(t2-t1).count();
-		cout << "Time-step " << step << " took " << its << " iterations and " << duration << "ms. Elements: " << c.nElementsTop() << endl;
+		cout << "Time-step " << step << " took " << its << " iterations and " << duration << "ms. Elements: " << c.nElementsTop() << " Ratio: " << c.nElementsTop() / data_t(max_level * max_level)<< endl;
 	}
 
 }

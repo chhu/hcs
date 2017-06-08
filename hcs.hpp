@@ -115,7 +115,7 @@ public:
 		for (int d = 0; d < dimensions; d++)
 			center[d] = scales[d] = 0.5;	// makes 1x1x... box from 0-> 1
 		max_level = (HCS_COORD_BITS - 2 - dimensions) / dimensions;
-		boundary_mask = ((1U << (dimensions + 1)) - 1) << (HCS_COORD_BITS - (dimensions + 1));
+		boundary_mask = ~(coord_t)0 << (HCS_COORD_BITS - dimensions - 1);
 		for (int d = 0; d < dimensions * 2; d += 2) {
 			coord_t single = ~(1U << (d / 2)) & part_mask;
 			successor_mask[d] = single;
@@ -179,13 +179,13 @@ public:
 			result |= s_mask & coord; // bits that have nothing to do with direction stay unchanged
 		}
 		// Did we hit the boundary?
-		level_t level = GetLevel(coord);
-		coord_t b_mask = (((coord_t)1 << HCS_LEVEL_BIT) - 1) ^ ((1 << (dimensions * level)) - 1);
-		if (result & b_mask) { // Yes. Set bits accordingly.
-			result = coord;
-			result |= (coord_t)1 << (HCS_COORD_BITS - 1);
-			result |= (coord_t)direction << (HCS_LEVEL_BIT - dimensions);
-		}
+		if (__count_leading_zeros(coord) == __count_leading_zeros(result))
+			return result;
+
+		// Mark result as boundary
+		result = coord;
+		result |= (coord_t)1 << (HCS_COORD_BITS - 1);
+		result |= (coord_t)direction << (HCS_COORD_BITS - 2);
 
 		return result;
 	}
@@ -223,7 +223,7 @@ public:
 		return (HCS_COORD_BITS - 1 - __count_leading_zeros(coord)) / dimensions;
 	}
 
-private:
+public:
 	// Turns the coordinate into an unconsistent state by removing the level-marker bit
 	static level_t RemoveLevel(coord_t &coord) {
 		level_t level_undivided = HCS_COORD_BITS - 1 - __count_leading_zeros(coord);
@@ -235,6 +235,15 @@ private:
 		return level_undivided / dimensions;
 	}
 
+	// Remove bits for level
+	static coord_t RemoveLevel(coord_t coord, level_t level) {
+#ifdef __BMI2__
+		coord = _bzhi_u64(coord, level * dimensions);
+#else
+		coord = coord & ((1U << level * dimensions) - 1);
+#endif
+		return coord;
+	}
 
 	// Set the level-marker bit of a (raw) coordinate
 	static void SetLevel(coord_t &coord, level_t level) {
@@ -257,7 +266,7 @@ public:
 		if (IsBoundary(coord))
 			return coord;
 		//assert(new_level_coord < (1U << dimensions));
-		return coord << dimensions + new_level_coord;
+		return (coord << dimensions) + new_level_coord;
 	}
 
 
@@ -274,7 +283,7 @@ public:
 	}
 
 	void getPosition(coord_t coord, pos_t &result) {
-		if (IsBoundary(coord) || coord == 0)
+		if (IsBoundary(coord) || coord <= 1)
 			return;
 		unscaled_t unscaled = getUnscaled(coord);
 		level_t level = GetLevel(coord);
@@ -301,19 +310,28 @@ public:
 		return result;
 	}
 
+	// Create "largest" linear coord for provided level
+	static coord_t CreateMaxLevel(level_t level) {
+		return ((coord_t)1U << (level * dimensions + 1)) - 1;
+	}
+
+	// Create "smallest" linear coord for provided level
+	static coord_t CreateMinLevel(level_t level) {
+		return ((coord_t)1U << (level * dimensions));
+	}
+
 	// Inspired by https://github.com/Forceflow/libmorton/
 	coord_t createFromUnscaled(level_t level, unscaled_t cart_coord) {
 		coord_t result = 0;
-
 #ifdef __BMI2__
 		for (uint8_t dim = 0; dim < dimensions; dim++)
-			result |=  _pdep_u64(cart_coord[dim], bmi_mask[dim]);
+			result |=  _pdep_u64(cart_coord[dim], RemoveLevel(bmi_mask[dim], level));
 #else
-		level++;
-		while (level--) {
-			coord_t shift = (coord_t)1 << level;
+		level_t l = level + 1;
+		while (l--) {
+			coord_t shift = (coord_t)1 << l;
 			for (uint8_t dim = 0; dim < dimensions; dim++)
-				result |= (cart_coord[dim] & shift) << ((dimensions - 1) * level + dim);
+				result |= (cart_coord[dim] & shift) << ((dimensions - 1) * l + dim);
 		}
 #endif
 		SetLevel(result, level);
@@ -322,10 +340,10 @@ public:
 
 	// Alters a single unscaled Cartesian component
 	void setSingleUnscaled(coord_t &result, level_t level, uint8_t dim, uint32_t unscaled_coord) {
-		coord_t mask = bmi_mask[dim]
-		result &= ~bmi_mask[dim]; // clear bits for dim while leaving level bits untouched
+		coord_t mask = RemoveLevel(bmi_mask[dim], level);
+		result &= ~mask; // clear bits for dim while leaving level bits untouched
 #ifdef __BMI2__
-		result |=  _pdep_u64(unscaled_coord, bmi_mask[dim]);
+		result |=  _pdep_u64(unscaled_coord, mask);
 #else
 		level++;
 		while (level--) {

@@ -1,6 +1,6 @@
 #include "includes.hpp"
 
-
+#include <bitset>
 
 int main(int argc, char **argv) {
 
@@ -17,6 +17,8 @@ int main(int argc, char **argv) {
 	H3 h3;
 
 	coord_t c;
+
+	cout << h1.GetLevel(h1.CreateMaxLevel(8)) << endl;
 
 	c = h1.createFromUnscaled(8, {127});
 	cout << "1D-center level-8: " << h1.toString(c) << endl;

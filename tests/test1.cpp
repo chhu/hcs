@@ -56,16 +56,24 @@ int main(int argc, char **argv) {
 	auto duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Traversing " << count << " neighbors took " << duration << "ms. Or " << (count / (double)duration) << " lookups per ms.\n";
 
+	//c =     h3.createFromList({0,0,0,0,0,0,0,0,0}); // Level 10 corner
+	//coord_t c_end = h3.createFromList({7,7,7,7,7,7,7,7,7}); // Level 10 corner
+	c = h3.CreateMinLevel(9);
+	coord_t c_end = h3.CreateMaxLevel(9);
+
+
+	cout << h3.toString(c) << endl;
+	cout << h3.toString(c_end) << endl;
 	t1 = high_resolution_clock::now();
-	c =     h3.createFromList({0,0,0,0,0,0,0,0,0}); // Level 10 corner
-	coord_t c_end = h3.createFromList({7,7,7,7,7,7,7,7,7}); // Level 10 corner
 
 	count = 0;
 
 	for (; c <= c_end; c++) {
 		H3::pos_t pos = h3.getPosition(c);
-		 assert(pos[0] < 1);
-		 count++;
+		assert(pos[0] < 1);
+		assert(pos[1] < 1);
+		assert(pos[2] < 1);
+		count++;
 	}
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<milliseconds>(t2-t1).count();

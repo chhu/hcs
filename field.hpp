@@ -20,7 +20,7 @@
  */
 
 using namespace std;
-
+using namespace hcs;
 
 template <typename DTYPE, typename HCSTYPE>
 class Field {
@@ -572,12 +572,10 @@ private:
 	void createEntireLevel(level_t level) {
 		if (data.size() > 1)
 			throw range_error("Not empty!");
-		data[0]->setTop(0, false);
+		data[1]->setTop(1, false);
 		for (level_t l = 1; l <= level; l++) {
-			coord_t level_start = 0;
-			coord_t level_end = ((coord_t)1 << (l * hcs.GetDimensions())) - 1;
-			hcs.SetLevel(level_start, l);
-			hcs.SetLevel(level_end, l);
+			coord_t level_start = hcs.CreateMinLevel(l);
+			coord_t level_end = hcs.CreateMaxLevel(l);
 			Bucket* bucket = new Bucket(level_start, level_end);
 			data[level_start] = bucket;
 			fill(bucket->top.begin(), bucket->top.end(), l == level);
@@ -727,6 +725,8 @@ private:
 	// values. The provided field may have a different DTYPE. The newly created coords are initialized with zero.
 	template <typename DTYPE2>
 	void takeStructure(Field<DTYPE2, HCSTYPE> &f) {
+		if (sameStructure(f))
+			return;
 		clear();
 		for (auto e : f.data) {
 			auto *b = e.second;
@@ -736,6 +736,26 @@ private:
 				bn->get(c) = 0;
 			data[b->start] = bn;
 		}
+	}
+
+	// Tests if the provided field has the same structure.
+	// The provided field may have a different DTYPE. The newly created coords are initialized with zero.
+	template <typename DTYPE2>
+	bool sameStructure(Field<DTYPE2, HCSTYPE> &f) {
+		if (f.data.size() != data.size())
+			return false;
+
+		auto it_self = data.begin();
+		auto it_foreign = f.data.begin();
+
+		while (it_self != data.end() || it_foreign != f.data.end()) {
+			if (it_self->first != it_foreign->first)
+				return false;
+			if ((it_self->second)->end != (it_foreign->second)->end)
+				return false;
+			++it_self; ++it_foreign;
+		}
+		return true;
 	}
 
     // Converts a Field with another DTYPE according to convert function. The structure of "this" remains.

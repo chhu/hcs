@@ -104,7 +104,7 @@ void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data
 	typedef Field<Vec, HX> VectorField;
 
 	// strange calling convention because template depends now on another template
-	result.template convert<Vec>(source, [](coord_t c, VectorField2 &source)->data_t {
+	result.template convert<Vec>(source, [](coord_t c, VectorField &source)->data_t {
 
 		HX &h = source.hcs;
 		data_t divergence = 0;
@@ -136,8 +136,7 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 
 	valarray<data_t> buffer(width * height);
 
-	coord_t level_start = 0;
-	hcs.SetLevel(level_start, level);
+	coord_t level_start = hcs.CreateMinLevel(level);
 	field.bracket_behavior = ScalarField2::BR_INTERP;
 	for (coord_t c = level_start; c < level_start + width * height; c++) {
 		H2::unscaled_t pos = hcs.getUnscaled(c);
@@ -170,8 +169,8 @@ void write_pgm(string filename, ScalarField2 &field, level_t level) {
 // Writes a PGM with the resolution of the highest level found in field, marking the level of each TL coord.
 void write_pgm_level(string filename, ScalarField2 &field) {
 	level_t highest = field.getHighestLevel();
-	coord_t c_lo = field.hcs.createFromUnscaled(highest, {0,0});
-	coord_t c_hi = c_lo + (1U << highest) * (1U << highest);
+	coord_t c_lo = field.hcs.CreateMinLevel(highest);
+	coord_t c_hi = field.hcs.CreateMaxLevel(highest);
 	ScalarField2 level_field;
 	level_field.createEntireLevel(highest);
 	for (coord_t c = c_lo; c < c_hi; c++) {
