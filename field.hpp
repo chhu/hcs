@@ -35,8 +35,8 @@ private:
 	Field(char symbol, HCSTYPE hcs_) : symbol(symbol), _current(NULL), _level_current{NULL}, hcs(hcs_), bracket_behavior(BR_THROW) {
 		coeff_up_count = coeff_down_count = 0;
 		// Create single-value center bucket, the only coordinate that always exists. [0]
-		data[0] = new Bucket(0, 0);
-		data[0]->setTop(0, true);
+		data[1] = new Bucket(1, 1);
+		data[1]->setTop(1, true);
 		for (auto &bf : boundary)
 			bf = nullptr;
 		for (bool &bf_prop : boundary_propagate)
@@ -797,8 +797,8 @@ private:
 		for (auto e : data)
 			delete e.second;
 		data.clear();
-		data[0] = new Bucket(0, 0);
-		data[0]->setTop(0, true);
+		data[1] = new Bucket(1, 1);
+		data[1]->setTop(1, true);
 		_current = NULL;
 	}
 

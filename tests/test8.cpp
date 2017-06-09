@@ -22,7 +22,7 @@ ScalarField2 criteria(ScalarField2 &f) {
 	return result;
 }
 
-void refinement(ScalarField2 &f, ScalarField2 &criteria, data_t sensitivity, level_t lowest_level, level_t highest_level, coord_t start = 0) {
+void refinement(ScalarField2 &f, ScalarField2 &criteria, data_t sensitivity, level_t lowest_level, level_t highest_level, coord_t start = 1) {
 	H2 &h = f.hcs;
 	level_t current = h.GetLevel(start);
 	data_t critical = criteria.get(start, true) * sensitivity;
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
 	{
 	    sense = std::stod(line);
 	}
-	catch(std::invalid_argument)
+	catch(const std::invalid_argument &)
 	{
 	    // can't convert
 	}
@@ -198,17 +198,24 @@ int main(int argc, char **argv) {
 		ScalarField rhs = c * 1. / time_step;  // right-hand-side or b-vector. Solve M * c = rhs
 		int its = solver.solve(M, c, rhs, 1000, 1e-8, 1e-14);  // ... with BiCGStab
 		c.propagate();
-		write_pgm("c_" + to_string(step) + ".pgm", c, max_level);
+
+		auto tref1 = high_resolution_clock::now();
+
 		ScalarField2 gm = criteria(c);
-		write_pgm("p_" + to_string(step) + ".pgm", gm, max_level);
 		gm.propagate(true);
 		refinement(c, gm, sense, min_level, max_level);
-		write_pgm_level("l_" + to_string(step) + ".pgm", c);
 		c.propagate();
 
+		auto tref2 = high_resolution_clock::now();
 		auto t2 = high_resolution_clock::now();
+
+		write_pgm("c_" + to_string(step) + ".pgm", c, max_level);
+		write_pgm("p_" + to_string(step) + ".pgm", gm, max_level);
+		write_pgm_level("l_" + to_string(step) + ".pgm", c);
+
 		auto duration = duration_cast<milliseconds>(t2-t1).count();
-		cout << "Time-step " << step << " took " << its << " iterations and " << duration << "ms. Elements: " << c.nElementsTop() << " Ratio: " << c.nElementsTop() / data_t(max_level * max_level)<< endl;
+		auto duration_ref = duration_cast<milliseconds>(tref2-tref1).count();
+		cout << "Time-step " << step << " took " << its << " iterations and " << duration << "ms. Refinement tool " << duration_ref << "ms. Elements: " << c.nElementsTop() << " Ratio: " << c.nElementsTop() / pow(1U << max_level, 2)<< endl;
 	}
 
 }

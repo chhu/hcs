@@ -3,16 +3,18 @@
 /* The H-Coordinate System
  * =======================
  *
- * This include / template library is an extended, multi-dimensional recursive coordinate system, similar to
- * the Z order space-filling curve or Morton-codes. It is more than a Z curve as it captures the recursive nature
- * best visualized from the H fractal. Each recursive refinement is called level. The coordinate storage type can
- * be changed here and is intentionally not a template parameter. Also the part that stores the level can be
- * configured (HCS_LEVEL_BIT) but you should know what you are doing.
+ * This include / template library provides an extended, multi-dimensional recursive coordinate system, based on
+ * the Z order space-filling curve or Morton-codes. It extends the Z curve as it captures the recursive nature
+ * of the H fractal. Each recursive refinement is called level.
+ * The coordinate type can be configured here and is intentionally not a template parameter. The bits available in
+ * the coordinate type in combination with the dimensions you want to use determines how many levels you can go.
+ *
  * The default coordinate type is unsigned 64bit, allowing a 3D recursion depth of 19 iterations (levels),
- * resulting in a closest distance of 1/2^19 for a scale of one (1x1x1 box).
- * The most significant bits determine the (iteration-) level, _the_ most significant bit marks a boundary coord.
- * The lower bits describe sub-coordinates, every D (dimensions) bits. The sub-coordinate of the highest level
- * is always at the least significant bits.
+ * resulting in a closest distance of 1/2^19 for a scale of one (1x1x1 box). There is a level-marker bit that
+ * determines the level of the coordinate, the lesser-significant bits are Morton codes for that level. This allows
+ * almost linear storage between levels, so coord can be used as an array index.
+ * The most significant bit marks a boundary coord, with the following N bits marking which boundary was hit, while
+ * the remaining bits still describe a valid interior coordinate that "hit" or requested the boundary.
  *
  * Because the H fractal best illustrates this, its called the H-coordinate-system
  *
@@ -36,26 +38,29 @@
  *	  Example:
  *	    Level-1 coordinate:                                                  X        Y      Z
  *	                    L1
- *	     0b0000 01 ... 001            Would result in position (center) + (+scale, -scale, -scale) / 2
+ *	     0b0000 .. 001 001            Would result in position (center) + (+scale, -scale, -scale) / 2
  *	                   ZYX
- *	              ^ HCS_LEVEL_BIT
+ *	                 ^ LEVEL-MARKER-BIT
  *
  *	    Level-2 coordinate:
  *	                    L1  L2
- *	     0b0000 10 ... 011 110        Would result in position (center) + (+scale, -scale, +scale) / 2 + (-scale, +scale, +scale) / 4
+ *	     0b0000 .. 001 011 110        Would result in position (center) + (+scale, -scale, +scale) / 2 + (-scale, +scale, +scale) / 4
  *	                   ZYX ZYX
+ *	                 ^ LEVEL-MARKER-BIT
  *
- *	 Again: The LSBs (Least Significant Bit) are always the ones for the highest level (from level part).
- *	 This guarantees shortest linear distance in memory for neighbors and is compatible with morton-codes.
+ *	 Remark: The LSBs (Least Significant Bit) are always the ones for the highest level (from level part).
+ *	 This guarantees shortest linear distance in memory for neighbors and is compatible with Morton-codes.
  *
  *	 What does "unscaled" mean:
  *	 Methods like getPosition() or createFromPosition() use the scalings provided in center + scales to
- *	 compute the H coordinate for a certain level. Unscaled means they operate on integers representing the
- *	 whole level. A level-8 coordinate in 2D has 2^8 x 2^8 possible locations, so an unscaled level-8 coordinate
- *	 would be in _unscaled_ Cartesian space from X= 0 -> 255 and Y=0 -> 255, while a level-9 has 2^9,
- *	 so X= 0 -> 511 and Y= 0 -> 511. An unscaled coordinate has a completely different "true" location than the
- *	 same coordinate at a different level!
+ *	 compute the H coordinate for a certain level in floating-point units.
+ *	 Unscaled means they operate on integers representing the whole level. A level-8 coordinate in 2D has
+ *	 2^8 x 2^8 possible locations, so an unscaled level-8 coordinate would be in _unscaled_ Cartesian space from
+ *	 X= 0 -> 255 and Y=0 -> 255, while a level-9 has 2^9, so X= 0 -> 511 and Y= 0 -> 511. An unscaled coordinate
+ *	 has a completely different "true" location than the same coordinate at a different level!
  *
+ *	 The HCS template library is independent of most other libs, exception is the toString() method.
+ *	 Intel/AMD CPUs greatly profit from BMI2 instruction set.
  */
 
 #pragma once
@@ -72,7 +77,6 @@ namespace hcs {
 typedef uint64_t coord_t;
 
 
-
 #define HCS_COORD_BITS sizeof(coord_t) * 8
 
 // Configure in this routine the fastest way to count leading zeros of your coord_t.
@@ -87,13 +91,13 @@ inline uint32_t __count_leading_zeros(coord_t c) {
  * Boundary coordinates
  * ====================
  * Generally, the "Special" bit (highest bit, or HCS_COORD_BITS-1) marks a boundary coordinate.
- * <dimension> bits are reserved for boundary direction from bits HCS_LEVEL_BIT-1 .. HCS_LEVEL_BIT-1 - D,
+ * <dimension> bits are reserved for boundary direction from bits HCS_LEVEL_BIT-2 .. HCS_LEVEL_BIT-2 - D,
  * telling you what boundary is meant. The embedded coordinate is the one inside the domain that "hit"
  * the boundary through neighbor search.
  */
 
-// A type used to carry separated level information, should be at least HCS_COORD_BITS - HCS_LEVEL_BIT - 1 bit wide,
-// so most / all(?) unsigned integer types will do.
+// A type used to carry separated level information, should be able to count to HCS_COORD_BITS,
+// so all unsigned integer types will do.
 typedef uint16_t level_t;
 
 // Data precision
@@ -102,7 +106,7 @@ typedef double data_t;
 using namespace std;
 
 // The H-coordinate system (HCS) class just stores the scaling and position parameters and calculates some other useful stuff.
-// The HCS class does not store data! Field does that.
+// The HCS class does not store data!
 
 template<size_t dimensions = 3>
 class HCS {
@@ -143,12 +147,12 @@ public:
 	array<coord_t, dimensions * 2> successor_mask;
 	array<coord_t, dimensions> bmi_mask;
 
-	// If the "special" bit is set, this is no ordinary coordinate...
+	// Test for most-significant bit
 	static bool IsBoundary(coord_t coord) {
 		return bool(coord & ((coord_t)1 << (HCS_COORD_BITS - 1)));
 	}
 
-	// ..because derived templaes cannot access HCS template params anymore
+	// ..because derived templates cannot access HCS template params anymore
 	static inline level_t GetDimensions() {
 		return dimensions;
 	}
@@ -160,10 +164,10 @@ public:
 
 	// If a coord is marked as boundary, retrieve the originating coord
 	coord_t removeBoundary(coord_t coord) {
-		return coord & ~boundary_mask;
+		return (coord << (dimensions + 1)) >> (dimensions + 1);
 	}
 
-	// Return neighbor in direction. 0=X+, 1=X-, 2=Y+, 3=Y-,...
+	// Return neighbor for a certain direction. 0=X+, 1=X-, 2=Y+, 3=Y-,...
 	// This uses overflow arithmetic, aka the successor formula
 	// https://en.wikipedia.org/wiki/Moser%E2%80%93de_Bruijn_sequence
 	coord_t getNeighbor(coord_t coord, uint8_t direction) {
@@ -193,6 +197,22 @@ public:
 	// Alternative approach using unscaled Cartesian coords. On systems with BMI2 instructions,
 	// this is on-par with original.
 	coord_t getNeighbor2(coord_t coord, uint8_t direction) {
+#ifdef __BMI2__
+		level_t bit_pos = GetLevelBitPosition(coord);
+		coord_t mask = _bzhi_u64(bmi_mask[direction >> 1], bit_pos);
+		uint32_t unscaled =  _pext_u64(coord, mask);
+		unscaled += direction & 1 ? -1 : 1;
+
+		if (unscaled >= 1U << (bit_pos / dimensions)) {
+			coord |= (coord_t)1 << (HCS_COORD_BITS - 1);
+			coord |= (coord_t)direction << (HCS_COORD_BITS - 2);
+		} else {
+			coord &= ~mask; // clear bits for dim while leaving level bits untouched
+			coord |=  _pdep_u64(unscaled, mask);
+		}
+		return coord;
+#else
+
 		uint32_t unscaled = getSingleUnscaled(coord, direction >> 1);
 		level_t l = GetLevel(coord);
 		uint32_t max_coord = (1U << l);
@@ -204,6 +224,7 @@ public:
 			setSingleUnscaled(coord, l, direction >> 1, unscaled);
 		}
 		return coord;
+#endif
 	}
 
 	// Returns a normal vector for the provided direction
@@ -219,20 +240,24 @@ public:
 
 	// Returns the iteration level of this coordinate. Higher level coordinates carry more information.
 	// CAREFUL: The Special bit is not cleared here for performance reasons!
-	static level_t GetLevel(coord_t coord) {
-		return (HCS_COORD_BITS - 1 - __count_leading_zeros(coord)) / dimensions;
+	static inline level_t GetLevel(coord_t coord) {
+		return GetLevelBitPosition(coord) / dimensions;
 	}
 
-public:
-	// Turns the coordinate into an unconsistent state by removing the level-marker bit
+	static inline level_t GetLevelBitPosition(coord_t coord) {
+		return (HCS_COORD_BITS - 1 - __count_leading_zeros(coord));
+	}
+
+private:
+	// Turns the coordinate into an inconsistent state by removing the level-marker bit
 	static level_t RemoveLevel(coord_t &coord) {
-		level_t level_undivided = HCS_COORD_BITS - 1 - __count_leading_zeros(coord);
+		level_t bit_pos = GetLevelBitPosition(coord);
 #ifdef __BMI2__
-		coord = _bzhi_u64(coord, level_undivided);
+		coord = _bzhi_u64(coord, bit_pos);
 #else
-		coord = coord & ((1U << level_undivided ) - 1);
+		coord = coord & ((1U << bit_pos ) - 1);
 #endif
-		return level_undivided / dimensions;
+		return bit_pos / dimensions;
 	}
 
 	// Remove bits for level
@@ -271,7 +296,7 @@ public:
 
 
 	// Extract the single-level-coord, not checking validity!!
-	// The order is reversed here, level 0 is the highest level
+	// The order is reversed here, level 0 is the highest level!
 	uint16_t extract(coord_t coord, level_t level) {
 		return (coord >> (dimensions * level)) & part_mask;
 	}
@@ -342,6 +367,7 @@ public:
 	void setSingleUnscaled(coord_t &result, level_t level, uint8_t dim, uint32_t unscaled_coord) {
 		coord_t mask = RemoveLevel(bmi_mask[dim], level);
 		result &= ~mask; // clear bits for dim while leaving level bits untouched
+
 #ifdef __BMI2__
 		result |=  _pdep_u64(unscaled_coord, mask);
 #else
@@ -377,6 +403,7 @@ public:
 #ifdef __BMI2__
 		return  _pext_u64(c, bmi_mask[dim]);
 #else
+		level_t level = RemoveLevel(c) + 1;
 		uint32_t result = 0;
 		coord_t one = 1;
 		while (level--) {
