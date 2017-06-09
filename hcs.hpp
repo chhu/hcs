@@ -403,7 +403,6 @@ public:
 #ifdef __BMI2__
 		return  _pext_u64(c, bmi_mask[dim]);
 #else
-		level_t level = RemoveLevel(c) + 1;
 		uint32_t result = 0;
 		coord_t one = 1;
 		while (level--) {
