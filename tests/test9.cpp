@@ -23,7 +23,7 @@ void poisson_err(ScalarField1 &err, ScalarField1 &x, ScalarField1 &b) {
 void poisson(ScalarField1 &x, ScalarField1 &b) {
 	level_t highest = x.getHighestLevel();
 //b/=pow(2,highest);
-	b.subHarmonics();
+	//b.subHarmonics();
 	//b.propagate();
 	x.propagate();
 	H1 &h =x.hcs;

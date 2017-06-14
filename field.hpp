@@ -422,10 +422,10 @@ class Field {
 	// This routine DELETES everything in the field and is meant as an initializer.
 	// If there are elements present, it throws.
 	void createEntireLevel(level_t level) {
-		if (data.size() > 1)
+		if (data.size() > 2)
 			throw range_error("Not empty!");
 
-		coord_t level_end = hcs.CreateMaxLevel(level) + 1;
+		coord_t level_end = hcs.CreateMaxLevel(level) + 2;
 		data.resize(level_end, DTYPE(0));
 		tree.resize(level_end, 0);
 		for (level_t l = level; l > 0; l--) {
@@ -448,9 +448,11 @@ class Field {
 		coord_t upper_corner = hcs.IncreaseLevel(coord, hcs.part_mask);
 
 		if (data.size() <= upper_corner) {
-			cout << "RESIZE: " << upper_corner << endl;
-			data.resize(upper_corner + 1);
-			tree.resize(upper_corner + 1, 0);
+			level_t l = hcs.GetLevel(upper_corner);
+			coord_t max_coord = hcs.CreateMaxLevel(l) + 2;
+			cout << "RESIZE to level: " << l << endl;
+			data.resize(max_coord);
+			tree.resize(max_coord, 0);
 		}
 
 		vector<DTYPE> interpolated(hcs.parts, data[coord]);
@@ -461,6 +463,7 @@ class Field {
 		tree[coord] = lower_corner;
 		for (coord_t c = lower_corner; c <= upper_corner; c++) {
 			tree[c] = c;
+			treefill_up(c, c);
 			data[c] = interpolated[c - lower_corner];
 		}
 
@@ -498,7 +501,7 @@ private:
 	}
 
 	void treefill_down(const coord_t start, const coord_t value) {
-		if ((start & hcs.parts_mask) > 0)
+		if ((start & hcs.part_mask) > 0)
 			return;
 		coord_t lower_level = hcs.ReduceLevel(start);
 
@@ -529,8 +532,8 @@ public:
 	level_t getHighestLevel() {
 		level_t highest = 1;
 		for (auto it = begin(true); it != end(); ++it)
-			if (hcs.GetLevel((*it)->first) > highest)
-				highest = hcs.GetLevel((*it)->first); // map's sort order is "greater", so highest-level bucket is first.
+			if (hcs.GetLevel((*it).first) > highest)
+				highest = hcs.GetLevel((*it).first); // map's sort order is "greater", so highest-level bucket is first.
 		return highest;
 	}
 
@@ -579,7 +582,7 @@ public:
 		if (sameStructure(f))
 			return;
 		tree = f.tree;
-		data.resize(tree.size, DTYPE(0));
+		data.resize(tree.size(), DTYPE(0));
 	}
 
 	// Tests if the provided field has the same structure.
@@ -632,8 +635,11 @@ public:
 
 	// Empties all data
 	void clear() {
-		createEntireLevel(1);
-		data[1] = DTYPE(0);
+		data.clear();
+		data.resize(2, DTYPE(0));
+		tree.clear();
+		tree.resize(2, 0);
+		tree[1] == 1;
 	}
 
 	// Iterator methods & class
@@ -659,9 +665,10 @@ public:
 	    		current = field->tree[1];
 	    	}
 	    	if (!at_end && only_level > 0) {
-	    		++(*this);
+	    		current = field->hcs.CreateMinLevel(only_level);
+	    		if (!field->exists(current))
+	    			++(*this);
 	    	}
-
 
 	    }
 
@@ -679,17 +686,30 @@ public:
 
 	    iterator& operator++ () {
 	    	if (top_only) {
-	    		current = tree[current + 1];
+	    		current = field->tree[current + 1];
 		    	at_end = current == 0;
-
 	    	} else {
 	    		current++;
-	    		while((tree[current] == 0 ||
-	    			    	(only_level > 0 && field->hcs.GetLevel(current) != only_level) ||
-							tree[current] < current)
-	    				&& current < tree.size())
-	    			current++;
-	    		at_end = (current == tree.size() - 1);
+	    		coord_t new_coord = field->tree[current];
+	    		do {
+					if (new_coord == 0) {
+						level_t last = field->hcs.GetLevel(current - 1);
+						current = field->hcs.CreateMinLevel(last + 1);
+						if (current >= field->tree.size() - 1 || (only_level > 0)) {
+							at_end = true;
+							current--;
+							return *this;
+						}
+					}
+					if (new_coord < current) {
+						level_t l_current = field->hcs.GetLevel(new_coord);
+						level_t l_new = field->hcs.GetLevel(new_coord);
+						uint32_t skip = pow(field->hcs.parts, l_new - l_current);
+						current += skip;
+					}
+					new_coord = field->tree[current];
+	    		} while (new_coord < current);
+	    		//at_end = (current == tree.size() - 1);
 	    	}
 	    	global_index++;
 	        return *this;

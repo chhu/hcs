@@ -10,8 +10,8 @@ int main(int argc, char **argv) {
 	ScalarField3 x;
 	cout << "3D - level 8 test, fully populated 256x256x256 box\n" << endl;
 
-	v1.createEntireLevel(8);
-	v2.createEntireLevel(8);
+	v1.createEntireLevel(7);
+	v2.createEntireLevel(7);
 	x.takeStructure(v1);
 
 	int v3size = sizeof(Vec3);
