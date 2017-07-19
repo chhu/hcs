@@ -280,14 +280,14 @@ class Field {
 
 		uint32_t parts = hcs.parts;
 		data_t inv_parts = 1. / data_t(parts);
-		for (size_t idx = data.size() - 1,  c = hcs.index2coord(idx); c > 0; idx -= parts, c--) {
+		for (size_t idx = data.size() - 1,  c = hcs.index2coord(idx); c > parts; idx -= parts, c -= parts) {
 			//coord_t c = hcs.index2coord(idx);
 			if (!hcs.IsValid(c))
 				c = hcs.CreateMaxLevel(hcs.GetLevel(c + 1) - 1);
 			if (!exists(c))
 				continue;
 			DTYPE sum = 0;
-			for (size_t j = idx - parts ; j <= idx; j++)
+			for (size_t j = idx - parts + 1; j <= idx; j++)
 				sum += data[j];
 			sum *= inv_parts;
 			data[hcs.coord2index(hcs.ReduceLevel(c))] = sum;
@@ -671,6 +671,10 @@ class Field {
 //	       return pair<coord_t, DTYPE&>(current, field->data[]);	// This should not happen... Other containers return garbage
 	       const size_t idx = field->hcs.coord2index(current);
 	       return pair<coord_t, DTYPE&>(current, field->data[idx]);	// This should not happen... Other containers return garbage
+	    }
+
+	    pair<coord_t, DTYPE&>* operator-> () const {
+	    	return &(*this);
 	    }
 
 	    iterator& operator++ () {
