@@ -130,6 +130,12 @@ public:
 			bmi_mask[d >> 1] = successor_mask[d+1] & ~boundary_mask;
 
 		}
+		level_bounds[0].first = level_bounds[0].second = 1;
+
+		for (int l = 1; l < level_bounds.size(); l++) {
+			level_bounds[l].first = CreateMinLevel(l);
+			level_bounds[l].second = CreateMaxLevel(l);
+		}
 	}
 
 	// A type to store a Cartesian position
@@ -147,6 +153,7 @@ public:
 
 	array<coord_t, dimensions * 2> successor_mask;
 	array<coord_t, dimensions> bmi_mask;
+	array<pair<coord_t, coord_t>, 64> level_bounds; // min-max pair of coords for each level
 
 	// Test for most-significant bit
 	static bool IsBoundary(coord_t coord) {
@@ -393,6 +400,23 @@ public:
 	}
 
 	// Inspired by https://github.com/Forceflow/libmorton/
+	uint32_t getSingleUnscaled(coord_t c, uint8_t dim) {
+		level_t level = RemoveLevel(c) + dimensions;
+#ifdef __BMI2__
+		return  _pext_u64(c, bmi_mask[dim]);
+#else
+		uint32_t result = 0;
+		coord_t one = 1;
+		while (level -= dimensions) {
+			uint8_t shift_selector = level;
+			uint8_t shiftback = (dimensions - 1) * level / dimensions;
+			result |= (c & (one << (shift_selector + dim))) >> (shiftback + dim);
+		}
+		return result;
+#endif
+	}
+
+	// Inspired by https://github.com/Forceflow/libmorton/
 	unscaled_t getUnscaled(coord_t c) {
 		unscaled_t result {};
 		level_t level = RemoveLevel(c) + dimensions;
@@ -408,6 +432,56 @@ public:
 		}
 #endif
 		return result;
+	}
+
+	// Increment / Decrement coord in-place. Returns true if a level-transition happened.
+	// !! IMPORTANT: The inc/dec routines only work correctly if a valid coord is passed. REASON: isValid() too expensive.
+	bool inc(coord_t &coord) {
+		level_t l = GetLevel(coord);
+		coord++;
+		if (coord > level_bounds[l].second) {
+			coord = level_bounds[l + 1].first;
+			return true;
+		}
+		return false;
+	}
+
+	// Does not decrease below 1
+	bool dec(coord_t &coord) {
+		if (coord <= 1)
+			return true;
+		level_t l = GetLevel(coord);
+		coord--;
+		if (coord < level_bounds[l].first) {
+			coord = level_bounds[l - 1].second;
+			return true;
+		}
+		return false;
+	}
+
+	// Increment / Decrement coord in-place by the amount of parts. Returns true if a level-transition happened.
+	// !! IMPORTANT: The inc/dec routines only work correctly if a valid coord is passed. REASON: isValid() too expensive.
+	bool incParts(coord_t &coord) {
+		level_t l = GetLevel(coord);
+		coord += parts;
+		if (coord > level_bounds[l].second) {
+			coord = level_bounds[l + 1].first;
+			return true;
+		}
+		return false;
+	}
+
+	// Does not decrease below 1
+	bool decParts(coord_t &coord) {
+		if (coord <= 1)
+			return true;
+		level_t l = GetLevel(coord);
+		coord -= parts;
+		if (coord < level_bounds[l].first) {
+			coord = level_bounds[l - 1].second;
+			return true;
+		}
+		return false;
 	}
 
 	// Turns c into a linear-index that includes the level.
@@ -426,8 +500,8 @@ public:
 	// Should be avoided.
 	coord_t index2coord(size_t index) {
 		for (level_t l = 1; l < max_level; l++) {
-			size_t start_idx = coord2index(CreateMinLevel(l));
-			size_t end_idx = coord2index(CreateMaxLevel(l));
+			size_t start_idx = coord2index(level_bounds[l].first);
+			size_t end_idx = coord2index(level_bounds[l].second);
 			if (index >= start_idx && index <= end_idx) {
 				index -= start_idx;
 				coord_t result = index;
@@ -438,24 +512,6 @@ public:
 		cout << "R: " << index << endl;
 		throw range_error("index2coord oob ");
 		//return 0;
-	}
-
-
-	// Inspired by https://github.com/Forceflow/libmorton/
-	uint32_t getSingleUnscaled(coord_t c, uint8_t dim) {
-		level_t level = RemoveLevel(c) + dimensions;
-#ifdef __BMI2__
-		return  _pext_u64(c, bmi_mask[dim]);
-#else
-		uint32_t result = 0;
-		coord_t one = 1;
-		while (level -= dimensions) {
-			uint8_t shift_selector = level;
-			uint8_t shiftback = (dimensions - 1) * level / dimensions;
-			result |= (c & (one << (shift_selector + dim))) >> (shiftback + dim);
-		}
-		return result;
-#endif
 	}
 
 

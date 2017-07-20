@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 	cout << "Multiply *= ScalarField of level 8 with level 7 took " << duration << "ms.\n";
 
 	ScalarField3 l6s;
-	l6s.createEntireLevel(4);
+	l6s.createEntireLevel(6);
 	t1 = high_resolution_clock::now();
 	y *= l6s;
 	t2 = high_resolution_clock::now();

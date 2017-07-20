@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 //		H2::pos_t pos2 = {x,y};
 		coord_t c3 = h3.createFromPosition(l, {x, y, z});
 		coord_t c2 = h2.createFromPosition(l, {x, y});
-		//f.refineTo(c3);
+		f.refineTo(c3);
 		//if (i > 1000) continue;
 		u.refineTo(c2);
 	}

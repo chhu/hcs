@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
 	for (; c <= c_end; c++) {
 		H3::pos_t pos = h3.getPosition(c);
-		sum += pos[0] + pos[1] + pos[2];
+		sum += pos[0] + pos[1] + pos[2]; // prevnts opt-out of loop
 		count++;
 	}
 	t2 = high_resolution_clock::now();

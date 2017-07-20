@@ -58,12 +58,9 @@ class Field {
 		for (int i = 0; i < 64; i++)
 			this->boundary[i] = boundary_propagate[i] ? f.boundary[i] : nullptr;
 		coeff_up_count = coeff_down_count = 0;
-		level_count = {};
 	}
 
-	// Because we "new"d Buckets, we need to release them.
-	~Field() {
-	}
+	~Field() {}
 
 	// Any other type of Field is a friend.
 	template <typename U, typename V>
@@ -100,7 +97,6 @@ class Field {
 
 
  private:
-	array<size_t, 64> level_count;
 
 	// The actual data is stored linear to coord for efficiency. Data storage is _not_ sparse!
 	vector<DTYPE> data;
@@ -280,17 +276,23 @@ class Field {
 
 		uint32_t parts = hcs.parts;
 		data_t inv_parts = 1. / data_t(parts);
-		for (size_t idx = data.size() - 1,  c = hcs.index2coord(idx); c > parts; idx -= parts, c -= parts) {
-			//coord_t c = hcs.index2coord(idx);
-			if (!hcs.IsValid(c))
-				c = hcs.CreateMaxLevel(hcs.GetLevel(c + 1) - 1);
-			if (!exists(c))
-				continue;
-			DTYPE sum = 0;
-			for (size_t j = idx - parts + 1; j <= idx; j++)
-				sum += data[j];
-			sum *= inv_parts;
+		size_t idx = data.size() - 1;
+		coord_t c = hcs.index2coord(idx);
+		c -= c % parts;
+		idx -= idx % parts;
+
+		while (c > parts) {
+			DTYPE sum = max ? -INFINITY : 0;
+			for (size_t j = idx; j < idx + parts; j++)
+				if (max)
+					sum = std::max(sum, data[j]);
+				 else
+					sum += data[j];
+			if (!max)
+				sum *= inv_parts;
 			data[hcs.coord2index(hcs.ReduceLevel(c))] = sum;
+			hcs.decParts(c);
+			idx -= parts;
 		}
 	}
 
@@ -714,25 +716,12 @@ class Field {
 	    // current may _not_ exist after call
 	    // return true if at end
 	    bool increment() {
-	    	current++;
-
-	    	// Level-skip
-	    	if (!hcs.IsValid(current)) {
-	    		level_t current_level = hcs.GetLevel(current - 1);
-	    		current = hcs.CreateMinLevel(current_level + 1);
-	    		if (only_level > 0) {
-	    			return true;
-	    		}
-	    	}
-
+	    	if (hcs.inc(current) && only_level > 0)
+	    		return true;
 
 	    	if (current >= field->tree.size()) {
 	    		return true;
 	    	}
-
-	    	if (hcs.GetDimensions() == 1 && only_level > 0)
-	    		return (hcs.GetLevel(current) != only_level);
-
 	    	return false;
 	    }
 	};
