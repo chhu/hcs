@@ -58,16 +58,13 @@ class Field {
 		for (int i = 0; i < 64; i++)
 			this->boundary[i] = boundary_propagate[i] ? f.boundary[i] : nullptr;
 		coeff_up_count = coeff_down_count = 0;
-		level_count = {};
 	}
 
-	// Because we "new"d Buckets, we need to release them.
-	~Field() {
-	}
+	~Field() {}
 
-	 // Any other type of Field is a friend.
-	 template <typename U, typename V>
-	 friend class Field;
+	// Any other type of Field is a friend.
+	template <typename U, typename V>
+	friend class Field;
 
 	// The H-coordinate system to operate on
 	HCSTYPE	hcs;
@@ -100,33 +97,30 @@ class Field {
 
 
  private:
-	array<size_t, 64> level_count;
 
 	// The actual data is stored linear to coord for efficiency. Data storage is _not_ sparse!
 	vector<DTYPE> data;
 
-	// The tree has the same size as data and its contents reveal if:
-	// - a coord is TLC if tree[coord] == coord
-	// - a coord is present but not top-level if tree[coord] > coord
-	// - a coord does not exist if tree[coord] < coord or sizeof(tree) > coord
-	// In case the coord is not top-level but existent, tree[coord] points to the "left-most" / sub-coord=0
-	// TLC coordinate. In case it does not exist, it points to the next existing TLC downwards in hierarchy.
-	// This is a _wasteful_ approach but fastest because everything can be done with just one lookup.
-	vector<coord_t> tree;
+	// The tree has the same size as index2coord(data.size()). It is therefore in the wasteful
+	// HCS coord space. tree[coord] reveals if coord exists or not.
+	vector<bool> tree;
 
  public:
 
 	// Returns the number of available elements for this field
 	size_t nElements() {
+		//return count(tree.begin(), tree.end(), true);
 		size_t sum = 0;
-		for (auto const & v : *this)
-			sum ++;
+		for (const auto  e : tree)
+		//for (size_t i = 0; i < tree.size(); i++)
+			sum += e;
 		return sum;
 	}
 
 	// Returns the number of top-level elements for this field
 	size_t nElementsTop() {
 		size_t sum = 0;
+
 		for (auto it = begin(true); it != end(); ++it)
 			sum++;
 		return sum;
@@ -144,27 +138,29 @@ class Field {
     			return intermediate;
     		case BR_REFINE:
     			refineTo(coord);
-    	    	return data[coord];
+    	    	return data[hcs.coord2index(coord)];
     		case BR_NOTHING:
     			return intermediate;
     		}
     	}
-    	return data[coord];
+    	return data[hcs.coord2index(coord)];
     }
 
 	// Do we have a value for this coord? And if yes, make sure it is in _current
     // A bucket's end coord is its last existing coord
 	bool exists(coord_t coord) {
-		if (hcs.IsBoundary(coord) || tree.size() >= coord)
-			return false;
-		return tree[coord] >= coord;
+		//	if (hcs.IsBoundary(coord) || tree.size() <= coord)
+		//if (tree.size() <= coord)
+		//	return false;
+
+		return (coord < tree.size()) ? tree.at(coord) : false;
 	}
 
 	// Does not query coefficients, throws if coord does not exist
 	DTYPE& getDirect(coord_t coord) {
     	if (!this->exists(coord))
 			throw range_error("[]: Coord does not exist");
-    	return data[coord];
+    	return data[hcs.coord2index(coord)];
 	}
 
 	// Returns value for coord, if not present, interpolates.
@@ -188,7 +184,7 @@ class Field {
 		}
 		if (exists(coord)) {
 			if (use_non_top || isTop(coord)) {
-				result += data[coord];
+				result += data[hcs.coord2index(coord)];
 				return;
 			} else {
 				for (uint16_t direction = 0; direction < hcs.parts; direction++) {
@@ -263,7 +259,7 @@ class Field {
 					//upscale_cache[current] = partial;
 					result += partial * weight;
 				} else { // current_exists = true in this branch, so _current is valid.
-					result += data[current] * weight;
+					result += data[hcs.coord2index(current)] * weight;
 				}
 			}
 		}
@@ -271,17 +267,33 @@ class Field {
 
 	// Do coordinates exist in a higher level?
 	bool isTop(coord_t coord) {
-		if (!exists(coord))
-			throw range_error("isTop coord does not exist!");
-		return tree[coord] == coord;
+		return exists(coord) ? !exists(hcs.IncreaseLevel(coord, 0)) : false;
 	}
 
 
 	// Average all non-top coords from top-level
 	void propagate(bool max = false) {
-		// Use the <greater> sorting from our data map that will deliver top-level coords first
-		// We don't store the averaged values immediately to avoid excessive lower_bound() lookups
 
+		uint32_t parts = hcs.parts;
+		data_t inv_parts = 1. / data_t(parts);
+		size_t idx = data.size() - 1;
+		coord_t c = hcs.index2coord(idx);
+		c -= c % parts;
+		idx -= idx % parts;
+
+		while (c > parts) {
+			DTYPE sum = max ? -INFINITY : 0;
+			for (size_t j = idx; j < idx + parts; j++)
+				if (max)
+					sum = std::max(sum, data[j]);
+				 else
+					sum += data[j];
+			if (!max)
+				sum *= inv_parts;
+			data[hcs.coord2index(hcs.ReduceLevel(c))] = sum;
+			hcs.decParts(c);
+			idx -= parts;
+		}
 	}
 
 	size_t coeff_up_count, coeff_down_count;
@@ -425,14 +437,15 @@ class Field {
 		if (data.size() > 2)
 			throw range_error("Not empty!");
 
-		coord_t level_end = hcs.CreateMaxLevel(level) + 2;
-		data.resize(level_end, DTYPE(0));
-		tree.resize(level_end, 0);
+		coord_t level_end_c = hcs.CreateMaxLevel(level);
+		size_t level_end_idx = hcs.coord2index(level_end_c);
+		data.resize(level_end_idx + 1, DTYPE(0));
+		tree.resize(level_end_c + 1, false);
 		for (level_t l = level; l > 0; l--) {
 			coord_t level_start = hcs.CreateMinLevel(l);
 			coord_t level_end = hcs.CreateMaxLevel(l);
 			for (coord_t c = level_start; c <= level_end; c++) {
-				tree[c] = (l == level ? c : tree[hcs.IncreaseLevel(c, 0)]);
+				tree[c] = true;
 			}
 		}
 	}
@@ -446,25 +459,24 @@ class Field {
 			return;
 		coord_t lower_corner = hcs.IncreaseLevel(coord, 0);
 		coord_t upper_corner = hcs.IncreaseLevel(coord, hcs.part_mask);
+		size_t upper_corner_idx = hcs.coord2index(upper_corner);
 
-		if (data.size() <= upper_corner) {
+		if (data.size() <= upper_corner_idx) {
 			level_t l = hcs.GetLevel(upper_corner);
-			coord_t max_coord = hcs.CreateMaxLevel(l) + 2;
-			cout << "RESIZE to level: " << l << endl;
-			data.resize(max_coord);
-			tree.resize(max_coord, 0);
+			//coord_t max_coord = hcs.CreateMaxLevel(l) + 2;
+			//cout << "RESIZE to level: " << l << endl;
+			data.resize(upper_corner_idx + 1);
+			tree.resize(upper_corner + 1, false);
 		}
 
-		vector<DTYPE> interpolated(hcs.parts, data[coord]);
+		vector<DTYPE> interpolated(hcs.parts, data[hcs.coord2index(coord)]);
 		if (interpolate_new_values)
-			for (uint32_t i = 0; i < hcs.parts; i++)
+			for (coord_t i = 0; i < hcs.parts; i++)
 				interpolated[i] = get(lower_corner + i);
 
-		tree[coord] = lower_corner;
 		for (coord_t c = lower_corner; c <= upper_corner; c++) {
-			tree[c] = c;
-			treefill_up(c, c);
-			data[c] = interpolated[c - lower_corner];
+			tree[c] = true;
+			(*this)[c] = interpolated[c - lower_corner];
 		}
 
 	}
@@ -486,35 +498,6 @@ class Field {
 		}
 	}
 
-private:
-	void treefill_up(const coord_t start, const coord_t value) {
-		coord_t lower_corner = hcs.IncreaseLevel(start, 0);
-		coord_t upper_corner = hcs.IncreaseLevel(start, hcs.part_mask);
-		if (data.size() <= upper_corner)
-			return;
-		for (coord_t c = lower_corner; c <= upper_corner; c++) {
-			tree[c] = value;
-		}
-		for (coord_t c = lower_corner; c <= upper_corner; c++) {
-			treefill_up(c, value);
-		}
-	}
-
-	void treefill_down(const coord_t start, const coord_t value) {
-		if ((start & hcs.part_mask) > 0)
-			return;
-		coord_t lower_level = hcs.ReduceLevel(start);
-
-		tree[lower_level] = value;
-
-		if (lower_level <= 1)
-			return;
-
-		treefill_down(lower_level, value);
-	}
-
-public:
-
 	// Remove all coords on higher level above coord
 	void coarse(coord_t coord) {
 		if (!exists(coord))
@@ -523,18 +506,21 @@ public:
 		if (isTop(coord))
 			return; // Nothing on top
 
-		tree[coord] = coord;
-		treefill_up(coord, coord);
-		treefill_down(coord, coord - coord % hcs.parts);
+		coord_t lower_corner = hcs.IncreaseLevel(coord, 0);
+		coord_t upper_corner = hcs.IncreaseLevel(coord, hcs.part_mask);
+		for (coord_t c = lower_corner; c <= upper_corner; c++) {
+			if (!isTop(c))
+				coarse(c);
+			tree[c] = false;
+		}
 	}
 
 	// Return highest stored coord-level. Could be faster.
 	level_t getHighestLevel() {
-		level_t highest = 1;
-		for (auto it = begin(true); it != end(); ++it)
-			if (hcs.GetLevel((*it).first) > highest)
-				highest = hcs.GetLevel((*it).first); // map's sort order is "greater", so highest-level bucket is first.
-		return highest;
+		coord_t c = tree.size() - 1;
+		while (c > 1 && !tree[c])
+			c--;
+		return hcs.GetLevel(c);
 	}
 
 
@@ -553,7 +539,9 @@ public:
 		return *this;
 	};
 
+	// Assign f to all elements
     Field<DTYPE, HCSTYPE>& operator=(DTYPE f) {
+    	//fill(data.begin(), data.end(), f);
     	for (auto e : *this)
     		e.second = f;
     	return *this;
@@ -582,7 +570,7 @@ public:
 		if (sameStructure(f))
 			return;
 		tree = f.tree;
-		data.resize(tree.size(), DTYPE(0));
+		data.resize(hcs.coord2index(tree.size() - 1), DTYPE(0));
 	}
 
 	// Tests if the provided field has the same structure.
@@ -591,12 +579,8 @@ public:
 	bool sameStructure(Field<DTYPE2, HCSTYPE> &f) {
 		if (f.data.size() != data.size())
 			return false;
-
-		// faster to use iterators
-		for (size_t i = 0; i < tree.size(); i++)
-			if (tree[i] != f.tree[i])
-				return false;
-		return true;
+		auto count = std::inner_product(std::begin(tree), std::end(tree), std::begin(f.tree), 0, std::plus<bool>(), std::equal_to<bool>());
+		return count == tree.size();
 	}
 
     // Converts a Field with another DTYPE according to convert function. The structure of "this" remains.
@@ -638,38 +622,43 @@ public:
 		data.clear();
 		data.resize(2, DTYPE(0));
 		tree.clear();
-		tree.resize(2, 0);
-		tree[1] == 1;
+		tree.resize(2, false);
+		tree[1] = 1;
 	}
 
 	// Iterator methods & class
+	//iterator dummy = iterator(this);
     iterator begin(bool top_only = false, int only_level = -1) {
         return iterator(this, top_only, only_level);
     }
 
     iterator end() {	// Just dummy, the begin iterator determines termination
-    	return iterator(this);
+    	return iterator(NULL);
     }
 
 
 	// C++ goodies, with this operator you can iterate over all existing coords in a field
 	class iterator {
 	  public:
-	    iterator(Field<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : current(1), global_index(0), field(field),	only_level(only_level), top_only(top_only) {
-
+	    iterator(Field<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : current(1), top_start(0), field(field),	only_level(only_level), top_only(top_only) {
+	    	if (field == NULL)
+	    		return;
+	    	hcs = field->hcs;
 	    	if (top_only && only_level > 0)
 	    		throw range_error("Field iterator can only be top_only or only_level, not both.");
-	    	at_end = field->tree[1] == 1;
+	    	at_end = !field->tree[current];
 
-	    	if (!at_end && top_only) {
-	    		current = field->tree[1];
+	    	if (!at_end && top_only && !field->isTop(current)) {
+	    		++(*this);
 	    	}
+	    	if (!at_end && top_only)
+	    		top_start = current;
+
 	    	if (!at_end && only_level > 0) {
-	    		current = field->hcs.CreateMinLevel(only_level);
+	    		current = hcs.CreateMinLevel(only_level);
 	    		if (!field->exists(current))
-	    			++(*this);
+	    			at_end = increment();
 	    	}
-
 	    }
 
 	    // these three methods form the basis of an iterator for use with
@@ -681,37 +670,35 @@ public:
 	    pair<coord_t, DTYPE&> operator* () const {
 	       if (at_end)
 	    	   throw range_error("Iterator reached end and was queried for value!");
-	       return pair<coord_t, DTYPE&>(current, field->data[current]);	// This should not happen... Other containers return garbage
+//	       return pair<coord_t, DTYPE&>(current, field->data[]);	// This should not happen... Other containers return garbage
+	       const size_t idx = field->hcs.coord2index(current);
+	       return pair<coord_t, DTYPE&>(current, field->data[idx]);	// This should not happen... Other containers return garbage
+	    }
+
+	    pair<coord_t, DTYPE&>* operator-> () const {
+	    	return &(*this);
 	    }
 
 	    iterator& operator++ () {
+	    	at_end = increment();
+
 	    	if (top_only) {
-	    		current = field->tree[current + 1];
-		    	at_end = current == 0;
-	    	} else {
-	    		current++;
-	    		coord_t new_coord = field->tree[current];
+	    		if (field->isTop(current))
+	    			return *this;
+
+	    		bool level_up = at_end ? false : field->tree[current]; // if current exists and is not top, we need to inc level
 	    		do {
-					if (new_coord == 0) {
-						level_t last = field->hcs.GetLevel(current - 1);
-						current = field->hcs.CreateMinLevel(last + 1);
-						if (current >= field->tree.size() - 1 || (only_level > 0)) {
-							at_end = true;
-							current--;
-							return *this;
-						}
-					}
-					if (new_coord < current) {
-						level_t l_current = field->hcs.GetLevel(new_coord);
-						level_t l_new = field->hcs.GetLevel(new_coord);
-						uint32_t skip = pow(field->hcs.parts, l_new - l_current);
-						current += skip;
-					}
-					new_coord = field->tree[current];
-	    		} while (new_coord < current);
-	    		//at_end = (current == tree.size() - 1);
+	    			current = level_up ? hcs.IncreaseLevel(current, 0) : hcs.ReduceLevel(current);
+	    		} while (!field->isTop(current));
+	    		at_end = top_start == current;
+	    		//while (!at_end && !field->isTop(current)) // expensive loop
+		    	//	at_end = increment();
+	    	} else {
+		    	if (current & hcs.part_mask > 0) // current is a multiple of parts
+			        return *this;
+		    	while (!at_end && !field->tree[current])
+		    		at_end = increment();
 	    	}
-	    	global_index++;
 	        return *this;
 	    }
 
@@ -719,10 +706,24 @@ public:
 	  private:
 
 	    bool at_end, top_only;
-	    size_t global_index;
+	    coord_t top_start;
 	    int only_level;
 	    coord_t current;
 	    Field<DTYPE, HCSTYPE> *field;
+	    HCSTYPE hcs;
+
+	    // increment current to next valid coord, including level-jumps and out-of-bounds check.
+	    // current may _not_ exist after call
+	    // return true if at end
+	    bool increment() {
+	    	if (hcs.inc(current) && only_level > 0)
+	    		return true;
+
+	    	if (current >= field->tree.size()) {
+	    		return true;
+	    	}
+	    	return false;
+	    }
 	};
 
 	// Iterator methods & class

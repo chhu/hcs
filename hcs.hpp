@@ -76,14 +76,15 @@ namespace hcs {
 // The uint type used limits the maximal level to store, also depending on how many dimensions you use.
 typedef uint64_t coord_t;
 
-
 #define HCS_COORD_BITS sizeof(coord_t) * 8
 
 // Configure in this routine the fastest way to count leading zeros of your coord_t.
 // This depends on compiler and CPU. The reference implementation is terribly slow.
 // Check out https://en.wikipedia.org/wiki/Find_first_set
-inline uint32_t __count_leading_zeros(coord_t c) {
+inline  __attribute__((always_inline)) int __count_leading_zeros(const coord_t c) {
+	//return c == 0 ? 64 :__builtin_clzll(c);
 	return __builtin_clzll(c);
+	//return __lzcnt64(c);
 };
 
 
@@ -129,6 +130,12 @@ public:
 			bmi_mask[d >> 1] = successor_mask[d+1] & ~boundary_mask;
 
 		}
+		level_bounds[0].first = level_bounds[0].second = 1;
+
+		for (int l = 1; l < level_bounds.size(); l++) {
+			level_bounds[l].first = CreateMinLevel(l);
+			level_bounds[l].second = CreateMaxLevel(l);
+		}
 	}
 
 	// A type to store a Cartesian position
@@ -146,10 +153,22 @@ public:
 
 	array<coord_t, dimensions * 2> successor_mask;
 	array<coord_t, dimensions> bmi_mask;
+	array<pair<coord_t, coord_t>, 64> level_bounds; // min-max pair of coords for each level
 
 	// Test for most-significant bit
 	static bool IsBoundary(coord_t coord) {
-		return bool(coord & ((coord_t)1 << (HCS_COORD_BITS - 1)));
+		return __count_leading_zeros(coord) == 0;
+		//return bool(coord & ((coord_t)1 << (HCS_COORD_BITS - 1)));
+	}
+
+	// returns true if coord is int the dead-zone.
+	static bool IsValid(coord_t coord) {
+		if (coord == 0)
+			return false;
+		uint32_t first_bit = HCS_COORD_BITS - __count_leading_zeros(coord) - 1;
+	// 2D:	1 3 5 7 9
+	// 3D:  1 4 7 10 13 -1: 0 3 6 9 12
+		return first_bit % dimensions == 0;
 	}
 
 	// ..because derived templates cannot access HCS template params anymore
@@ -189,7 +208,7 @@ public:
 		// Mark result as boundary
 		result = coord;
 		result |= (coord_t)1 << (HCS_COORD_BITS - 1);
-		result |= (coord_t)direction << (HCS_COORD_BITS - 2);
+		result |= (coord_t)direction << (HCS_COORD_BITS - 1 - dimensions);
 
 		return result;
 	}
@@ -250,6 +269,7 @@ public:
 
 private:
 	// Turns the coordinate into an inconsistent state by removing the level-marker bit
+	// Returns the position of the level marker.
 	static level_t RemoveLevel(coord_t &coord) {
 		level_t bit_pos = GetLevelBitPosition(coord);
 #ifdef __BMI2__
@@ -257,7 +277,7 @@ private:
 #else
 		coord = coord & ((1U << bit_pos ) - 1);
 #endif
-		return bit_pos / dimensions;
+		return bit_pos;
 	}
 
 	// Remove bits for level
@@ -380,16 +400,33 @@ public:
 	}
 
 	// Inspired by https://github.com/Forceflow/libmorton/
+	uint32_t getSingleUnscaled(coord_t c, uint8_t dim) {
+		level_t level = RemoveLevel(c) + dimensions;
+#ifdef __BMI2__
+		return  _pext_u64(c, bmi_mask[dim]);
+#else
+		uint32_t result = 0;
+		coord_t one = 1;
+		while (level -= dimensions) {
+			uint8_t shift_selector = level;
+			uint8_t shiftback = (dimensions - 1) * level / dimensions;
+			result |= (c & (one << (shift_selector + dim))) >> (shiftback + dim);
+		}
+		return result;
+#endif
+	}
+
+	// Inspired by https://github.com/Forceflow/libmorton/
 	unscaled_t getUnscaled(coord_t c) {
 		unscaled_t result {};
-		level_t level = RemoveLevel(c) + 1;
+		level_t level = RemoveLevel(c) + dimensions;
 #ifdef __BMI2__
 		for (uint8_t dim = 0; dim < dimensions; dim++)
 			result[dim] =  _pext_u64(c, bmi_mask[dim]);
 #else
-		while (level--) {
-			uint8_t shift_selector = dimensions * level;
-			uint8_t shiftback = (dimensions - 1) * level;
+		while (level -= dimensions) {
+			uint8_t shift_selector = level - dimensions;
+			uint8_t shiftback = (dimensions - 1) * (level - dimensions) / dimensions;
 			for (uint8_t dim = 0; dim < dimensions; dim++)
 				result[dim] |= (c & (1U << (shift_selector + dim))) >> (shiftback + dim);
 		}
@@ -397,33 +434,106 @@ public:
 		return result;
 	}
 
-	// Inspired by https://github.com/Forceflow/libmorton/
-	uint32_t getSingleUnscaled(coord_t c, uint8_t dim) {
-		level_t level = RemoveLevel(c) + 1;
-#ifdef __BMI2__
-		return  _pext_u64(c, bmi_mask[dim]);
-#else
-		uint32_t result = 0;
-		coord_t one = 1;
-		while (level--) {
-			uint8_t shift_selector = dimensions * level;
-			uint8_t shiftback = (dimensions - 1) * level;
-			result |= (c & (one << (shift_selector + dim))) >> (shiftback + dim);
+	// Increment / Decrement coord in-place. Returns true if a level-transition happened.
+	// !! IMPORTANT: The inc/dec routines only work correctly if a valid coord is passed. REASON: isValid() too expensive.
+	bool inc(coord_t &coord) {
+		level_t l = GetLevel(coord);
+		coord++;
+		if (coord > level_bounds[l].second) {
+			coord = level_bounds[l + 1].first;
+			return true;
 		}
-		return result;
-#endif
+		return false;
 	}
+
+	// Does not decrease below 1
+	bool dec(coord_t &coord) {
+		if (coord <= 1)
+			return true;
+		level_t l = GetLevel(coord);
+		coord--;
+		if (coord < level_bounds[l].first) {
+			coord = level_bounds[l - 1].second;
+			return true;
+		}
+		return false;
+	}
+
+	// Increment / Decrement coord in-place by the amount of parts. Returns true if a level-transition happened.
+	// !! IMPORTANT: The inc/dec routines only work correctly if a valid coord is passed. REASON: isValid() too expensive.
+	bool incParts(coord_t &coord) {
+		level_t l = GetLevel(coord);
+		coord += parts;
+		if (coord > level_bounds[l].second) {
+			coord = level_bounds[l + 1].first;
+			return true;
+		}
+		return false;
+	}
+
+	// Does not decrease below 1
+	bool decParts(coord_t &coord) {
+		if (coord <= 1)
+			return true;
+		level_t l = GetLevel(coord);
+		coord -= parts;
+		if (coord < level_bounds[l].first) {
+			coord = level_bounds[l - 1].second;
+			return true;
+		}
+		return false;
+	}
+
+	// Turns c into a linear-index that includes the level.
+	// HCS coords are almost linear but have gaps between the levels.
+	size_t coord2index(coord_t c) {
+		level_t l = RemoveLevel(c);
+#ifdef __BMI2__
+		coord_t mask = _bzhi_u64(bmi_mask[0], l);
+#else
+		coord_t mask = bmi_mask[0] & ((1U << l) - 1);
+#endif
+		return c + mask;
+	}
+
+	// Turns a linear index back into a HCS coord. SLOW!
+	// Should be avoided.
+	coord_t index2coord(size_t index) {
+		for (level_t l = 1; l < max_level; l++) {
+			size_t start_idx = coord2index(level_bounds[l].first);
+			size_t end_idx = coord2index(level_bounds[l].second);
+			if (index >= start_idx && index <= end_idx) {
+				index -= start_idx;
+				coord_t result = index;
+				SetLevel(result, l);
+				return result;
+			}
+		}
+		cout << "R: " << index << endl;
+		throw range_error("index2coord oob ");
+		//return 0;
+	}
+
+
 
 	string toString(coord_t coord) {
 		stringstream result;
 		if (coord == 0)
-			return string("(SPECIAL)");
+			return string("(SPECIAL/ZERO)");
 		if (coord == 1)
 			return string("(CENTER)");
 
 		if (IsBoundary(coord)) {
-			result << "(BOUNDARY: " << (GetBoundaryDirection(coord)) << " ORIGIN : " << toString(removeBoundary(coord)) << ")";
+			coord_t origin = removeBoundary(coord);
+			if (IsValid(origin))
+				result << "(BOUNDARY: " << (GetBoundaryDirection(coord)) << " ORIGIN : " << toString(origin) << ")";
+			else
+				result << "(BOUNDARY / INVALID ORIGIN)";
 			return result.str();
+		}
+
+		if (!IsValid(coord)) {
+			return string("(INVALID)");
 		}
 		int level = GetLevel(coord);
 		result << "(" << level << ") [";

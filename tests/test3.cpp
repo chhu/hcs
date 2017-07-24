@@ -5,11 +5,32 @@ int main(int argc, char **argv) {
 	int n_refinements = 100000;
 
 	H3 h3;
-
 	H2 h2;
+	H1 h1;
 
+//	cout << __builtin_clzll(1) << " " << __builtin_clzll(0) << endl;
+//	cout << __count_leading_zeros(1) << " " << __count_leading_zeros(0) << endl;
+//	return 0;
+//	cout << h2.toString(h2.getNeighbor(1, 0)) << endl;
+//	cout << h2.toString(h2.getNeighbor(1, 1)) << endl;
+//	cout << h2.toString(h2.getNeighbor(1, 2)) << endl;
+//	cout << h3.toString(h3.getNeighbor(1, 5)) << endl;
+//	return 0;
 	ScalarField3 f;
 	ScalarField2 u;
+	/*
+	ScalarField1 x;
+	x.createEntireLevel(2);
+	for (auto e = x.begin(); e != x.end(); ++e)
+		cout << h1.toString((*e).first) << endl;
+
+	cout << endl;
+//	x.coarse(h1.createFromList({1}));
+	x.refineTo(h1.createFromList({1,1,0,1}));
+	for (auto e = x.begin(true); e != x.end(); ++e)
+		cout << h1.toString((*e).first) << endl;
+
+	*/
 	auto t1 = high_resolution_clock::now();
 
 	// Create random structure between level 5 and 10 coords.
@@ -18,7 +39,7 @@ int main(int argc, char **argv) {
 		double y = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
 		double z = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
 		double _l = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
-		level_t l = double(_l * 6 + 5);
+		level_t l = double(_l * 7 + 3);
 //		H3::pos_t pos3 = {x,y,z};
 //		H2::pos_t pos2 = {x,y};
 		coord_t c3 = h3.createFromPosition(l, {x, y, z});
@@ -30,7 +51,7 @@ int main(int argc, char **argv) {
 	auto t2 = high_resolution_clock::now();
 	auto duration = duration_cast<milliseconds>(t2-t1).count();
 
-	cout << "Created " << f.nElements() << " elements in " << duration << "ms.\n";
+	cout << "Created " << u.nElements() << " elements in " << duration << "ms.\n";
 	t1 = high_resolution_clock::now();
 	// Now iterate and set to a certain function
 
@@ -61,12 +82,6 @@ int main(int argc, char **argv) {
 	u.boundary[0] = u.boundary[1] = [](ScalarField2 *self, coord_t cc)->data_t { coord_t c = self->hcs.removeBoundary(cc); return self->get(c);};
 
 	write_pgm("test31.pgm", u, 10);
-
-	for (auto &bc : u.boundary) bc = nullptr;
-	for (auto e : u) {
-		e.second = h2.GetLevel(e.first); // Value = level
-	}
-	u.propagate();
-	write_pgm("test32.pgm", u, 10);
+	write_pgm_level("test32.pgm", u);
 
 }

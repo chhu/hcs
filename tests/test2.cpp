@@ -1,27 +1,65 @@
 #include "includes.hpp"
-
+#include <bitset>
 int main(int argc, char **argv) {
 
+	H3 h;
+	ScalarField3 x;
+
+	x.createEntireLevel(8);
+
+	size_t count = 0;
+	auto t1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		count += x.nElementsTop() / 10;
+	}
+	auto t2 = high_resolution_clock::now();
+	auto duration = duration_cast<milliseconds>(t2-t1).count();
+	cout << "10 counts took " << duration << "ms. "<< count << "\n";
+
+/*
+	coord_t tot = 0;
+	coord_t start = 0;
+	for (int i = 0; i <= 9; i++) {
+		coord_t min_l = h.CreateMinLevel(i);
+		coord_t max_l = h.CreateMaxLevel(i);
+		bitset<32> min_(min_l);
+		bitset<32> max_(max_l);
+		coord_t diff = max_l - min_l + 1;
+		cout << "LEVEL " << i << endl;
+		cout << min_ << endl << max_ << endl << min_l << " " << max_l << "  " << diff <<  endl;
+		bitset<32> start_(start);
+		cout << start_ << "   " << start << " -> " << start + diff << endl;
+		cout << "C2I " << h.coord2index(min_l);
+		cout << "---" << endl;
+		tot += diff;
+		start += diff;
+
+		coord_t tot = 0;
+	}
+	cout << tot << endl;
+//	return 0;
+*/
 	// Test suite
+	x.clear();
 	H3 h3;
 
 	VectorField3 v1;
 	VectorField3 v2;
-	ScalarField3 x;
+	//ScalarField3 x;
 	cout << "3D - level 8 test, fully populated 256x256x256 box\n" << endl;
 
-	v1.createEntireLevel(7);
-	v2.createEntireLevel(7);
+	v1.createEntireLevel(8);
+	v2.createEntireLevel(8);
 	x.takeStructure(v1);
 
 	int v3size = sizeof(Vec3);
 	cout << "Single vector3 size: " << v3size << "bytes, nTop = " << v1.nElementsTop() << endl;
-	auto t1 = high_resolution_clock::now();
+	t1 = high_resolution_clock::now();
 	Vec3 vec({1,2,3});
 	v1 = vec;
 	v2 = vec;
-	auto t2 = high_resolution_clock::now();
-	auto duration = duration_cast<milliseconds>(t2-t1).count();
+	t2 = high_resolution_clock::now();
+	duration = duration_cast<milliseconds>(t2-t1).count();
 
 	double total_bytes_written = v3size * v1.nElements();
 	duration /= 2;
@@ -79,10 +117,11 @@ int main(int argc, char **argv) {
 	cout << "Multiply *= ScalarField of level 8 with level 7 took " << duration << "ms.\n";
 
 	ScalarField3 l6s;
-	l6s.createEntireLevel(4);
+	l6s.createEntireLevel(6);
 	t1 = high_resolution_clock::now();
 	y *= l6s;
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Multiply *= ScalarField of level 8 with level 6 took " << duration << "ms.\n";
+
 }
