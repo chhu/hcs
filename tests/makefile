@@ -7,7 +7,7 @@ CFLAGS = -O3 -g -Wno-narrowing -std=c++11 -march=native -I..
 
 
 all: $(patsubst %.cpp, %, $(wildcard *.cpp))
-%: %.cpp includes.hpp solver.hpp ../field.hpp ../hcs.hpp
+%: %.cpp includes.hpp solver.hpp ../sparsefield.hpp ../hcs.hpp
 	$(CC) $(CFLAGS) $< -o $@
 clean: 
 	rm -f $(patsubst %.cpp, %, $(wildcard *.cpp))

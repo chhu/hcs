@@ -355,6 +355,122 @@ public:
 		return result;
 	}
 
+
+	array<coord_t, 1 << dimensions> getCoeffCoords(coord_t coord) {
+		array<coord_t, 1 << dimensions> result;
+		uint16_t high_part = extract(coord, 0); 	//
+		coord_t origin = ReduceLevel(coord);
+
+		for (uint32_t i = 0; i < (1 << dimensions); i++) {
+			coord_t current = origin;
+			bool bc_hit = false;
+			for (uint32_t j = 0; j < dimensions; j++) {
+				if (((i >> j) & 1) == 0)
+					continue;
+
+				coord_t prev_current = current;
+				current = getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
+				if (IsBoundary(current)) {
+					result[i] = current;
+					current = prev_current;
+					bc_hit = true;
+				}
+			}
+			if (bc_hit)
+				continue;
+			result[i] = current;
+		}
+		return result;
+	}
+
+	map<coord_t, data_t> getCoeffs(coord_t coord) {
+		map<coord_t, data_t> result;
+		// Spawn a rectangle of lower-level coords around missing coord
+		// A (hyper)cubical interpolation (2D bi-linear, 3D tri-linear,...) is the best choice,
+		// simplexes (triangle, tetrahedron, ...) are not unique in orthogonal spaced coordinates.
+		// The neighborhood-search that returns 2^D coordinates that cover our coord is
+		// surprisingly straight forward, and the interpolation factors follow the same schema.
+		// The originating coord is the one from reducing coord. It is always our closest corner,
+		// should therefore get the highest interpolation factor.
+		// From there the high_part of coord determines the first D search directions.
+		// Hypercube search pattern that surrounds coord from a lower level:
+		// 2D: Requires 4 coords (box). The first is _aways_ the level-reduced version of
+		//	   coord itself, others are determined by the reduced direction (high_part) of coord.
+		// high_part = 0b11 -> X+ Y+ (X+)Y+ <<- SAME ->> (Y+)X+  = 3 neighbors
+		// 			   0b00 -> X- Y- (X-)Y- <<- SAME ->> (Y-)X-
+		// 			   0b01 -> X+ Y- (X+)Y- <<- SAME ->> (Y-)X+
+		// Coords 3D : Box with 8 corners, one is known.
+		// 0b101 -> X+ Y- Z+ (X+)Y- (X+)Z+ (Y-)Z+ ((X+)Y-)Z+
+		//        The order is not important. Many combinations lead to the same coord.
+		//		  This combination follows a bit-order from ordinary counting!
+		//		  Three bits for three dimensions, the order is not important, the
+		//		  neighborhood direction from high_part is!
+		//        X+ Y- Z+
+		//        0  0  0     (nothing, the origin point)
+		//        0  0  1     Z+
+		//        0  1  0     Y-
+		//		  0  1  1     Y- -> Z+
+		//	      1  0  0     X+
+		//		  1  0  1     X+ -> Z+
+		//        1  1  0     X+ -> Y-  (the neighbor of X+ in Y- direction)
+		//		  1  1  1     X+ -> Y- -> Z+ (the one on the opposite site)
+		// Weights 3D:
+		//     0 = 0.75, 1 = 0.25
+		//
+		//        0  0  0  =  0.75³         = 0.4219
+		//        0  0  1  =  0.25  * 0.75² = 0.1406
+		//        0  1  0  =  0.25  * 0.75² = 0.1406
+		//        0  1  1  =  0.25² * 0.75  = 0.0469
+		//		  1  0  0  =  0.25  * 0.75² = 0.1406
+		//        1  0  1  =  0.25² * 0.75  = 0.0469
+		//        1  1  0  =  0.25² * 0.75  = 0.0469
+		//        1  1  1  =  0.25³         = 0.0156
+		//						TOTAL	    = 1 :)
+		// This principle is universal for all dimensions!
+		uint16_t high_part = extract(coord, 0); 	//
+		coord_t origin = ReduceLevel(coord);
+
+		array<bool, 1 << dimensions> boundary_quench;
+		for (uint8_t j = 0; j < dimensions; j++) {
+			bool plus = ((high_part >> j) & 1);
+			boundary_quench[j] = IsBoundary(getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
+		}
+
+		for (uint32_t i = 0; i < (1 << dimensions); i++) {
+			coord_t current = origin;
+			array<coord_t, dimensions> bc_collector;
+			uint32_t bc_collector_count = 0;
+
+			data_t weight = 1;
+
+			for (uint32_t j = 0; j < dimensions; j++)
+				if (boundary_quench[j])
+					weight *= 0.5;
+				else
+					weight *= ((i >> j) & 1) ? 0.25 : 0.75;
+
+			for (uint32_t j = 0; j < dimensions; j++) {
+				if (((i >> j) & 1) == 0)
+					continue;
+
+				coord_t prev_current = current;
+				current = getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
+				if (IsBoundary(current)) {
+					bc_collector[bc_collector_count++] = current;
+					current = prev_current;
+				}
+			}
+			if (bc_collector_count > 0) {
+				for (uint32_t k = 0; k < bc_collector_count; k++)
+					result[bc_collector[k]] += weight / bc_collector_count;
+				continue;
+			}
+			result[current] += weight;
+		}
+
+		return result;
+	}
+
 	// Create "largest" linear coord for provided level
 	static coord_t CreateMaxLevel(level_t level) {
 		return ((coord_t)1U << (level * dimensions + 1)) - 1;

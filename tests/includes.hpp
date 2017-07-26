@@ -37,8 +37,9 @@
 
 // Own includes
 #include "hcs.hpp"
-#include "field.hpp"
 #include "tensor.hpp"
+#include "sparsefield.hpp"
+#include "field.hpp"
 
 using namespace std;
 using namespace chrono;
@@ -49,30 +50,30 @@ typedef HCS<3> H3;  // 3D
 typedef HCS<4> H4;  // 4D
 typedef HCS<5> H5;  // 5D
 
-typedef Field<data_t, H1> ScalarField1; // 1D scalar field type
-typedef Field<data_t, H2> ScalarField2;
-typedef Field<data_t, H3> ScalarField3;
-typedef Field<data_t, H4> ScalarField4;
-typedef Field<data_t, H5> ScalarField5;
+typedef SparseField<data_t, H1> ScalarField1; // 1D scalar field type
+typedef SparseField<data_t, H2> ScalarField2;
+typedef SparseField<data_t, H3> ScalarField3;
+typedef SparseField<data_t, H4> ScalarField4;
+typedef SparseField<data_t, H5> ScalarField5;
 
 typedef Tensor1<data_t, 2> Vec2;	// Single "vector" in 2D / 3D. Similar to old Point<T>
 typedef Tensor1<data_t, 3> Vec3;
 typedef Tensor1<data_t, 4> Vec4;
 
-typedef Field<Vec2, H2> VectorField2; // Vector field 2D / 3D
-typedef Field<Vec3, H3> VectorField3;
-typedef Field<Vec3, H4> VectorField4;
+typedef SparseField<Vec2, H2> VectorField2; // Vector field 2D / 3D
+typedef SparseField<Vec3, H3> VectorField3;
+typedef SparseField<Vec3, H4> VectorField4;
 
 
 // Dimension-independent gradient operator
 // Takes a scalar field as input and returns the vector field
 // Example:  VectorField3 grad_of_x = grad<3>(x);  // x is instance of ScalarField3
 template<size_t dimension>
-void grad(Field<data_t, HCS<dimension> > &source, Field<Tensor1<data_t, dimension>, HCS<dimension> > &result) {
+void grad(SparseField<data_t, HCS<dimension> > &source, SparseField<Tensor1<data_t, dimension>, HCS<dimension> > &result) {
 	typedef Tensor1<data_t, dimension> Vec;
 	typedef HCS<dimension> HX;
-	typedef Field<Vec, HX> VectorField;
-	typedef Field<data_t, HX> ScalarField;
+	typedef SparseField<Vec, HX> VectorField;
+	typedef SparseField<data_t, HX> ScalarField;
 
 	// strange calling convention because template depends now on another template
 	result.template convert<data_t>(source, [](coord_t c, ScalarField &source)->Vec {
@@ -97,11 +98,11 @@ void grad(Field<data_t, HCS<dimension> > &source, Field<Tensor1<data_t, dimensio
 // Takes a scalar field as input and returns the vector field
 // Example:  VectorField3 grad_of_x = grad<3>(x);  // x is instance of ScalarField3
 template<size_t dimension>
-void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data_t, HCS<dimension> > &result) {
+void div(SparseField<Tensor1<data_t, dimension>, HCS<dimension> >  &source, SparseField<data_t, HCS<dimension> > &result) {
 	typedef Tensor1<data_t, dimension> Vec;
 	typedef HCS<dimension> HX;
-	typedef Field<data_t, HX> ScalarField;
-	typedef Field<Vec, HX> VectorField;
+	typedef SparseField<data_t, HX> ScalarField;
+	typedef SparseField<Vec, HX> VectorField;
 
 	// strange calling convention because template depends now on another template
 	result.template convert<Vec>(source, [](coord_t c, VectorField &source)->data_t {

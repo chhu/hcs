@@ -53,28 +53,40 @@ int main(int argc, char **argv) {
 		cout << "X    : "; cin >> uc[0];
 		cout << "Y    : "; cin >> uc[1];
 		//cout << "Unscaled Z: "; cin >> uc[2];
-		cout << "Use non-top: "; cin >> use_non_top;
+	//	cout << "Use non-top: "; cin >> use_non_top;
 		coord_t c = h2.createFromPosition(level, uc);
 		cout << "Closest H2 coord: " << h2.toString(c) << endl;
-		ScalarField2::coeff_map_t coeffs;
-		x.coeff_down_count = x.coeff_up_count = 0;
-		x.getCoeffs(c, coeffs, use_non_top);
+		//ScalarField2::coeff_map_t coeffs;
+		//x.coeff_down_count = x.coeff_up_count = 0;
+		//x.getCoeffs(c, coeffs, use_non_top);
+		//auto coeffs = h2.getCoeffCoords(c);
+		auto coeffs = h2.getCoeffs(c);
+		auto coeffc = h2.getCoeffCoords(c);
 		int count =  0;
 		data_t sum = 0;
 		for (auto coeff : coeffs) {
 			cout << "Coeff " << count++ << ": " << h2.toString(coeff.first) << " Weight: " << coeff.second << endl;
 			sum += coeff.second;
+//			cout << "Coeff " << count++ << ": " << h2.toString(coeff) << endl;
+
 		}
+		count =  0;
+		for (auto coeff : coeffc) {
+			cout << "Coeff " << count++ << ": " << h2.toString(coeff) << endl;
+
+		}
+		/*
+
 		cout << "Non-Existent recursive calls: " << x.coeff_down_count <<
 				" Top-averaging recursive calls: " << x.coeff_up_count <<
 				" Total (should be 1): " << sum << endl <<
 				" Value: " << x.get(c) << endl <<
 				"Neighbor coords and values:\n";
-
 		for (int ne_idx = 0; ne_idx < x.hcs.parts; ne_idx++) {
 			coord_t ne_coord = h2.getNeighbor(c, ne_idx);
 			cout << h2.toString(ne_coord) << " " << x.get(ne_coord) << endl;
 		}
+		*/
 
 	}
 

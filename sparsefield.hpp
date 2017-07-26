@@ -14,7 +14,7 @@
  * - Field supplies basic arithmetic operators
  * - A bracket operator for coordinates is implemented, with adjustable behavior for non-existing coords.
  * - The performance of exists() relies on STL's map::lower_bound O(log) complexity
- * - The center coordinate (0) always exists
+ * - The center coordinate (1) always exists
  * - boundary conditions can be implemented as lambdas
  *
  */
@@ -23,14 +23,15 @@ using namespace std;
 using namespace hcs;
 
 template <typename DTYPE, typename HCSTYPE>
-class Field {
+class SparseField {
 
  public:
 	class iterator; // The public iterator class
 	class dual_iterator; // The public iterator class
 
-	Field(char symbol, HCSTYPE hcs_) : symbol(symbol), hcs(hcs_), bracket_behavior(BR_THROW) {
-		coeff_up_count = coeff_down_count = 0;
+	SparseField(HCSTYPE hcs_) : hcs(hcs_), bracket_behavior(BR_THROW) {
+		coeff_up_count = 0;
+		coeff_down_count = 0;
 		clear();
 		// Create single-value center bucket, the only coordinate that always exists. [0]
 
@@ -40,16 +41,13 @@ class Field {
 			bf_prop = true;
 	}
 
-	Field(char symbol) : Field(symbol, HCSTYPE()) {}
-	Field(HCSTYPE hcs) : Field('x', hcs) {}
-	Field() : Field('x', HCSTYPE()) {}
+	SparseField() : SparseField(HCSTYPE()) {}
 
 
 	// The copy constructor, to make quick copies of the field and its structure
 	// Field<??> a = b; Or Field<??> a(b);
-	Field(const Field<DTYPE, HCSTYPE> &f) {
+	SparseField(const SparseField<DTYPE, HCSTYPE> &f) {
 		//cout << "FCOPY\n"; // debug hint, this is an expensive op and can happen when you least expect it
-		this->symbol = f.symbol;
 		this->hcs = f.hcs;
 		this->bracket_behavior = f.bracket_behavior;
 		this->data = f.data;
@@ -60,23 +58,19 @@ class Field {
 		coeff_up_count = coeff_down_count = 0;
 	}
 
-	~Field() {}
+	~SparseField() {}
 
 	// Any other type of Field is a friend.
 	template <typename U, typename V>
-	friend class Field;
+	friend class SparseField;
 
 	// The H-coordinate system to operate on
 	HCSTYPE	hcs;
 
 	// The boundary functions
-	array<function<DTYPE(Field<DTYPE, HCSTYPE> *self, coord_t origin)>, 64> boundary; // max 32 dimensions
+	array<function<DTYPE(SparseField<DTYPE, HCSTYPE> *self, coord_t origin)>, 64> boundary; // max 32 dimensions
 	array<bool, 64> boundary_propagate;												  // if this field is copied, is the boundary function copied too?
 
-	/*
-	 * Open properties, without getter / setter, feel free to modify them at any time.
-	 */
-	char		symbol; // Single character symbol, like 'T' to distinguish
 
 	// If a value is accessed via [], and if that value does not exist:
 	//   BR_THROW: throws range_error, slow if it happens often.
@@ -526,7 +520,7 @@ class Field {
 
     // Assignment operator requires equal structure, dirty-check with data.size()
 	// isTop is not copied because of assumption of equal structure
-	Field &operator=(const Field& f){
+	SparseField &operator=(const SparseField& f){
 		//cout << "XCOPY\n";
 		assert(("= Operator would alter structure. if this is intended, call takeStructure(x) first!",
 				data.size() == f.data.size()));
@@ -540,7 +534,7 @@ class Field {
 	};
 
 	// Assign f to all elements
-    Field<DTYPE, HCSTYPE>& operator=(DTYPE f) {
+    SparseField<DTYPE, HCSTYPE>& operator=(DTYPE f) {
     	//fill(data.begin(), data.end(), f);
     	for (auto e : *this)
     		e.second = f;
@@ -551,22 +545,22 @@ class Field {
     // Exampe: a * b keeps sparse structure of a and multiplies with (possible) interpolates from b
     // while b * a keeps sparse structure of b. A generic merge() can specify merged structure and arbitrary ops.
 
-    Field<DTYPE, HCSTYPE> operator-() const { Field<DTYPE, HCSTYPE> result = *this; for (auto e : result) e.second = -e.second; return result;}
+    SparseField<DTYPE, HCSTYPE> operator-() const { SparseField<DTYPE, HCSTYPE> result = *this; for (auto e : result) e.second = -e.second; return result;}
 
-    Field<DTYPE, HCSTYPE>& operator*= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second *= const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
-    Field<DTYPE, HCSTYPE>& operator/= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second /= const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
-    Field<DTYPE, HCSTYPE>& operator+= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second += const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
-    Field<DTYPE, HCSTYPE>& operator-= (const Field<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second -= const_cast<Field<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator*= (const SparseField<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second *= const_cast<SparseField<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator/= (const SparseField<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second /= const_cast<SparseField<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator+= (const SparseField<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second += const_cast<SparseField<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator-= (const SparseField<DTYPE, HCSTYPE>& rhs) { for (auto e : (*this)) e.second -= const_cast<SparseField<DTYPE, HCSTYPE>*>(&rhs)->get(e.first); return *this;}
 
-    Field<DTYPE, HCSTYPE>& operator*= (const DTYPE& val) { for (auto e : (*this)) e.second *= val; return *this;}
-    Field<DTYPE, HCSTYPE>& operator/= (const DTYPE& val) { for (auto e : (*this)) e.second /= val; return *this;}
-    Field<DTYPE, HCSTYPE>& operator+= (const DTYPE& val) { for (auto e : (*this)) e.second += val; return *this;}
-    Field<DTYPE, HCSTYPE>& operator-= (const DTYPE& val) { for (auto e : (*this)) e.second -= val; return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator*= (const DTYPE& val) { for (auto e : (*this)) e.second *= val; return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator/= (const DTYPE& val) { for (auto e : (*this)) e.second /= val; return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator+= (const DTYPE& val) { for (auto e : (*this)) e.second += val; return *this;}
+    SparseField<DTYPE, HCSTYPE>& operator-= (const DTYPE& val) { for (auto e : (*this)) e.second -= val; return *this;}
 
 	// Clears the field and takes the same coordinate structure as the provided field, without copying their
 	// values. The provided field may have a different DTYPE. The newly created coords are initialized with zero.
 	template <typename DTYPE2>
-	void takeStructure(Field<DTYPE2, HCSTYPE> &f) {
+	void takeStructure(SparseField<DTYPE2, HCSTYPE> &f) {
 		if (sameStructure(f))
 			return;
 		tree = f.tree;
@@ -576,7 +570,7 @@ class Field {
 	// Tests if the provided field has the same structure.
 	// The provided field may have a different DTYPE. The newly created coords are initialized with zero.
 	template <typename DTYPE2>
-	bool sameStructure(Field<DTYPE2, HCSTYPE> &f) {
+	bool sameStructure(SparseField<DTYPE2, HCSTYPE> &f) {
 		if (f.data.size() != data.size())
 			return false;
 		auto count = std::inner_product(std::begin(tree), std::end(tree), std::begin(f.tree), 0, std::plus<bool>(), std::equal_to<bool>());
@@ -594,7 +588,7 @@ class Field {
 	//  ScalarField2 vecmag;
 	//  vecmag.convert<Tensor1<data_t, 2> >(v2, [](coord_t c, VectorField2 &source)->data_t {return source.get(c).length();});
 	template <typename DTYPE2>
-	void convert(Field<DTYPE2, HCSTYPE> &source, function<DTYPE(coord_t, Field<DTYPE2, HCSTYPE> &)> convert_fn) {
+	void convert(SparseField<DTYPE2, HCSTYPE> &source, function<DTYPE(coord_t, SparseField<DTYPE2, HCSTYPE> &)> convert_fn) {
 
 		for (auto it = begin(true); it != end(); ++it) {
 			coord_t own_coord = (*it).first;
@@ -609,7 +603,7 @@ class Field {
 	// merger function must have 2 arguments of foreign DTYPE2& and return DTYPE.
 	// The resulting structure will be the one of f1!
 	template <typename DTYPE2>
-	void merge(Field<DTYPE2, HCSTYPE> &source1, Field<DTYPE2, HCSTYPE> &source2, function<DTYPE(coord_t, DTYPE2, DTYPE2)> merge_fn) {
+	void merge(SparseField<DTYPE2, HCSTYPE> &source1, SparseField<DTYPE2, HCSTYPE> &source2, function<DTYPE(coord_t, DTYPE2, DTYPE2)> merge_fn) {
 
 		for (auto it = begin(true); it != end(); ++it) {
 			coord_t own_coord = (*it).first;
@@ -640,7 +634,7 @@ class Field {
 	// C++ goodies, with this operator you can iterate over all existing coords in a field
 	class iterator {
 	  public:
-	    iterator(Field<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : current(1), top_start(0), field(field),	only_level(only_level), top_only(top_only) {
+	    iterator(SparseField<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : current(1), top_start(0), field(field),	only_level(only_level), top_only(top_only) {
 	    	if (field == NULL)
 	    		return;
 	    	hcs = field->hcs;
@@ -709,7 +703,7 @@ class Field {
 	    coord_t top_start;
 	    int only_level;
 	    coord_t current;
-	    Field<DTYPE, HCSTYPE> *field;
+	    SparseField<DTYPE, HCSTYPE> *field;
 	    HCSTYPE hcs;
 
 	    // increment current to next valid coord, including level-jumps and out-of-bounds check.
@@ -727,13 +721,13 @@ class Field {
 	};
 
 	// Iterator methods & class
-    dual_iterator begin(Field<DTYPE, HCSTYPE>* field2, bool top_only = false, int only_level = -1) {
+    dual_iterator begin(SparseField<DTYPE, HCSTYPE>* field2, bool top_only = false, int only_level = -1) {
     	return dual_iterator(this, field2, iterator(this, top_only, only_level), iterator(field2, top_only, only_level));
     }
 
 	class dual_iterator {
 	  public:
-	    dual_iterator(Field<DTYPE, HCSTYPE>* field1, Field<DTYPE, HCSTYPE>* field2, iterator if1, iterator if2 ) : field1(field1), field2(field2), if1(if1), if2(if2) {
+	    dual_iterator(SparseField<DTYPE, HCSTYPE>* field1, SparseField<DTYPE, HCSTYPE>* field2, iterator if1, iterator if2 ) : field1(field1), field2(field2), if1(if1), if2(if2) {
 	    }
 
 	    // these three methods form the basis of an iterator for use with
@@ -759,8 +753,8 @@ class Field {
 	    }
 
 	  private:
-	    Field<DTYPE, HCSTYPE> *field1;
-	    Field<DTYPE, HCSTYPE> *field2;
+	    SparseField<DTYPE, HCSTYPE> *field1;
+	    SparseField<DTYPE, HCSTYPE> *field2;
 	    iterator if1;
 	    iterator if2;
 	};
@@ -769,69 +763,69 @@ class Field {
 };
 
 // Other non-member arithmetic ops
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator* (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator* (const SparseField<DTYPE, HCSTYPE>& lhs, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result *= rhs;
 	return result;
 };
 
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator* (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = rhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator* (const DTYPE& val, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = rhs;
 	result *= val;
 	return result;
 };
 
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator* (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator* (const SparseField<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result *= val;
 	return result;
 };
 
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator/ (const SparseField<DTYPE, HCSTYPE>& lhs, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result /= rhs;
 	return result;
 };
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = rhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator/ (const DTYPE& val, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = rhs;
 	for (auto e : result)
 		e.second = val / e.second;
 	return result;
 }
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator/ (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator/ (const SparseField<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result /= val;
 	return result;
 }
 
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator+ (const SparseField<DTYPE, HCSTYPE>& lhs, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result += rhs;
 	return result;
 };
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = rhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator+ (const DTYPE& val, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = rhs;
 	result += val;
 	return result;
 }
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator+ (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator+ (const SparseField<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result += val;
 	return result;
 }
 
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const Field<DTYPE, HCSTYPE>& lhs, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator- (const SparseField<DTYPE, HCSTYPE>& lhs, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result -= rhs;
 	return result;
 };
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const DTYPE& val, const Field<DTYPE, HCSTYPE>& rhs) {
-	Field<DTYPE, HCSTYPE> result = -rhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator- (const DTYPE& val, const SparseField<DTYPE, HCSTYPE>& rhs) {
+	SparseField<DTYPE, HCSTYPE> result = -rhs;
 	result += val;
 	return result;
 }
-template <typename DTYPE, typename HCSTYPE> Field<DTYPE, HCSTYPE> operator- (const Field<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
-	Field<DTYPE, HCSTYPE> result = lhs;
+template <typename DTYPE, typename HCSTYPE> SparseField<DTYPE, HCSTYPE> operator- (const SparseField<DTYPE, HCSTYPE>& lhs, const DTYPE& val) {
+	SparseField<DTYPE, HCSTYPE> result = lhs;
 	result -= val;
 	return result;
 }

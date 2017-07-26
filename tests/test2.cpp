@@ -2,7 +2,7 @@
 #include <bitset>
 int main(int argc, char **argv) {
 
-	H3 h;
+//	H3 h;
 	ScalarField3 x;
 
 	x.createEntireLevel(8);
@@ -116,6 +116,7 @@ int main(int argc, char **argv) {
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Multiply *= ScalarField of level 8 with level 7 took " << duration << "ms.\n";
 
+/*
 	ScalarField3 l6s;
 	l6s.createEntireLevel(6);
 	t1 = high_resolution_clock::now();
@@ -123,5 +124,46 @@ int main(int argc, char **argv) {
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Multiply *= ScalarField of level 8 with level 6 took " << duration << "ms.\n";
+*/
+	// Setup raw-upscale test
+	HCS<6> h;
+	const int source_level = 3;
 
+	// Source Field
+	coord_t ls_min = h.CreateMinLevel(source_level);
+	coord_t ls_max = h.CreateMaxLevel(source_level);
+
+	vector<data_t> lsraw(ls_max - ls_min + 1, 1.);
+
+	// Target Field
+	coord_t lt_min = h.CreateMinLevel(source_level + 1);
+	coord_t lt_max = h.CreateMaxLevel(source_level + 1);
+
+	vector<data_t> ltraw(lt_max - lt_min + 1, 0.);
+
+	t1 = high_resolution_clock::now();
+	for (coord_t c = lt_min; c <= lt_max; c++) {
+		auto coeffs = h.getCoeffs(c);
+		size_t target_idx = c - lt_min;
+		for (auto coeff : coeffs) { // coeffs _must_ only contain L8 coords because we queried a L9 coord
+			if (h.IsBoundary(coeff.first)) { // assume all boundaries have 1
+				ltraw[target_idx] += coeff.second;
+			} else {
+				size_t source_idx = coeff.first - ls_min;
+				ltraw[target_idx] += lsraw[source_idx] * coeff.second;
+			}
+		}
+	}
+	t2 = high_resolution_clock::now();
+	duration = duration_cast<milliseconds>(t2-t1).count();
+	cout << "Raw upscale of " << h.GetDimensions() << "D L" << h.GetLevel(ls_min) << "->L" << h.GetLevel(lt_min) << " took " << duration << "ms. Target Elements : " << ltraw.size() << " Interpolations/ms : " << data_t(ltraw.size()) / (duration) << endl;
+
+	bool err = false;
+	for (coord_t c = lt_min; c <= lt_max; c++) {
+		size_t target_idx = c - lt_min;
+		if (abs(1. - ltraw[target_idx]) > 1e-15) {
+			cout << "Interpolation Error: " << h.toString(c) << " ERR: " << abs(1.-ltraw[target_idx]) << endl;
+			break;
+		}
+	}
 }
