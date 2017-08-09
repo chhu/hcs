@@ -9,7 +9,7 @@ ScalarField2 criteria(ScalarField2 &f) {
 	grad_f.takeStructure(f);
 	result.takeStructure(f);
 	grad<2>(f, grad_f);
-	result.convert<Vec2>(grad_f, [](coord_t c, VectorField2 &grad_f)->data_t {
+	result.convert<Vec2>(grad_f, [](coord_t c, VectorField2Base &grad_f)->data_t {
 		data_t result = 0;
 		/*
 		for (uint16_t i = 0; i < grad_f.hcs.parts; i++) {
@@ -55,8 +55,10 @@ int main(int argc, char **argv) {
 
 	// Dimension setup
 	typedef H2 HCS;
-	typedef ScalarField2 ScalarField;
-	typedef VectorField2 VectorField;
+    typedef ScalarField2 ScalarField;
+    typedef ScalarField2Base ScalarFieldBase;
+    typedef VectorField2 VectorField;
+    typedef VectorField2Base VectorFieldBase;
 	typedef Vec2 Vec;
 
 	// Resolution setup
@@ -112,7 +114,7 @@ int main(int argc, char **argv) {
 */
 	// make v stress-free at all boundaries
 	for (auto &boundary : v.boundary)
-		boundary = [](VectorField *self, coord_t c)->Vec {
+		boundary = [](VectorFieldBase *self, coord_t c)->Vec {
 			return self->get(self->hcs.removeBoundary(c)); // Neumann BC, derivative == 0
 		};
 
@@ -132,7 +134,7 @@ int main(int argc, char **argv) {
 
 	ScalarField2 gm = criteria(c);
 	//write_pgm("crit_init.pgm", gm, max_level);
-	gm.propagate(true);
+	gm.propagate();
 
 	refinement(c, gm, sense, min_level, max_level);
 	//write_pgm_level("ar.pgm", c);
@@ -148,7 +150,7 @@ int main(int argc, char **argv) {
 	data_t time_step = 0.001;
 
 	// Implicit first-order upwind finite-volume stencil, no diffusion
-	M.setStencil([&v, &time_step](coord_t coord, ScalarField &x)->ScalarField::coeff_map_t {
+	M.setStencil([&v, &time_step](coord_t coord, ScalarFieldBase &x)->ScalarFieldBase::coeff_map_t {
 		level_t l = x.hcs.GetLevel(coord);
 		data_t dist = 1. / ((coord_t)1 << x.hcs.GetLevel(coord));	// distance to neighbors
 		data_t face_area = pow(dist, x.hcs.GetDimensions() - 1);	// all face area around our box are equal
@@ -202,7 +204,7 @@ int main(int argc, char **argv) {
 		auto tref1 = high_resolution_clock::now();
 
 		ScalarField2 gm = criteria(c);
-		gm.propagate(true);
+		gm.propagate();
 		refinement(c, gm, sense, min_level, max_level);
 		c.propagate();
 

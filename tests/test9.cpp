@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 	b[h.createFromList({0,1,1,1,1,1,1,1})] = 1/2048.;//1 / 1024.;
 	b[h.createFromList({0,1,1,1,1,1,1,1,1})] = 1 / 2048.;
 	//b[h.createFromUnscaled(max_level, {4})] = 1;*/
-	b.boundary[0] = b.boundary[1] = [](ScalarField1 *self, coord_t cc)->data_t {
+	b.boundary[0] = b.boundary[1] = [](ScalarField1Base *self, coord_t cc)->data_t {
 	//	return self->get(self->hcs.removeBoundary(cc));
 		return 0;
 	};

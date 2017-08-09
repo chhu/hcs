@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
 
 	// Turns the right-side boundary value to 1
 
-	x.boundary[0] = [](ScalarField1 *self, coord_t c)->data_t {
+	x.boundary[0] = [](ScalarField1Base *self, coord_t c)->data_t {
 		//return self->get(self->hcs.removeBoundary(c)); // Neumann, derivative == 0
 		return 0;	// Dirichlet to 1
 	};

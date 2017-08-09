@@ -45,13 +45,13 @@ int main(int argc, char **argv) {
 	write_pgm("test4.pgm", x2, max_level);
 
 	// turn vector field into scalar field containing only x (or u) component
-	x2.convert<Vec2>(v2, [](coord_t c, VectorField2 &v)->data_t {
+	x2.convert<Vec2>(v2, [](coord_t c, VectorField2Base &v)->data_t {
 		return v.get(c).x;
 	});
 	x2.propagate();	// convert() operates on TLCs only
 	write_pgm("test4x.pgm", x2, max_level);
 
-	x2.convert<Vec2>(v2, [](coord_t c, VectorField2 &v)->data_t {
+	x2.convert<Vec2>(v2, [](coord_t c, VectorField2Base &v)->data_t {
 		return v[c].y;
 	});
 	x2.propagate();

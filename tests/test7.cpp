@@ -13,8 +13,10 @@ int main(int argc, char **argv) {
 
 	// Dimension setup
 	typedef H2 HCS;
-	typedef ScalarField2 ScalarField;
-	typedef VectorField2 VectorField;
+    typedef ScalarField2 ScalarField;
+    typedef VectorField2 VectorField;
+    typedef ScalarField2Base ScalarFieldBase;
+    typedef VectorField2Base VectorFieldBase;
 	typedef Vec2 Vec;
 
 	// Resolution setup
@@ -71,7 +73,7 @@ int main(int argc, char **argv) {
 
 	// make v stress-free at all boundaries
 	for (auto &boundary : v.boundary)
-		boundary = [](VectorField *self, coord_t c)->Vec {
+		boundary = [](VectorFieldBase *self, coord_t c)->Vec {
 			return self->get(self->hcs.removeBoundary(c)); // Neumann BC, derivative == 0
 		};
 
@@ -84,7 +86,7 @@ int main(int argc, char **argv) {
 	data_t time_step = 0.01;
 
 	// Implicit first-order upwind finite-volume stencil, no diffusion
-	M.setStencil([&v, &time_step](coord_t coord, ScalarField &x)->ScalarField::coeff_map_t {
+	M.setStencil([&v, &time_step](coord_t coord, ScalarFieldBase &x)->ScalarFieldBase::coeff_map_t {
 		level_t l = x.hcs.GetLevel(coord);
 		data_t dist = 1. / ((coord_t)1 << x.hcs.GetLevel(coord));	// distance to neighbors
 		data_t face_area = pow(dist, x.hcs.GetDimensions() - 1);	// all face area around our box are equal

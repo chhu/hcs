@@ -30,8 +30,9 @@ public:
 	}
 
 	void mul(FTYPE& x, FTYPE& result) {
-		for (auto dual_it = x.begin(&result, true); dual_it != x.end(); ++dual_it) {
-			coord_t coord = get<0>(*dual_it);
+		for (auto e : x) {
+			coord_t coord = e.first;
+
 
 			auto coeff_cache_it = coeff_cache.find(coord);
 			typename FTYPE::coeff_map_t coeffs;
@@ -41,11 +42,11 @@ public:
 			} else
 				coeffs = coeff_cache_it->second;
 					//stencil(coord, x);
-			DTYPE &result = get<2>(*dual_it);
-			result = coeffs[coord] * get<1>(*dual_it);	// start w main diagonal
+			DTYPE &result_ = result.getDirect(coord);
+			result_ = coeffs[coord] * e.second;	// start w main diagonal
 			for (auto coeff : coeffs)
 				if (coeff.first != coord)
-					result += coeff.second * x.get(coeff.first);
+					result_ += coeff.second * x.get(coeff.first);
 		}
 			//get<2>(*dual_it) = mul_stencil(get<0>(*dual_it), get<1>(*dual_it), x);
 	}
@@ -57,16 +58,16 @@ class Solver {
 public:
 	data_t dot(FTYPE& a, FTYPE& b) {
 		data_t result = 0;
-		for (auto iter = a.begin(&b, true); iter != a.end(); ++iter) {	// dual iterator
-			result += std::get<1>(*iter) * std::get<2>(*iter);
+		for (auto e : a) {	// dual iterator
+			result += e.second * b[e.first];
 		}
 		return result;
 	}
 
 	data_t norm(FTYPE& a) {
 		data_t result = 0;
-		for (auto e = a.begin(true); e != a.end(); ++e)
-			result += (*e).second * (*e).second;
+		for (auto e : a)
+			result += e.second * e.second;
 		return result;
 	}
 

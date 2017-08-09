@@ -3,13 +3,19 @@
 int main(int argc, char **argv) {
 
 //	H3 h;
-	ScalarField3 x;
+	ScalarField3 x,o,m;
 
 	x.createEntireLevel(8);
-
+	x = 111;
+    o.createEntireLevel(8);
+    m.createEntireLevel(8);
+	o = 89;
+	m = x + o;
+	cout << m[1] << endl;
+//	return 0;
 	size_t count = 0;
 	auto t1 = high_resolution_clock::now();
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 1; i++) {
 		count += x.nElementsTop() / 10;
 	}
 	auto t2 = high_resolution_clock::now();
@@ -82,7 +88,7 @@ int main(int argc, char **argv) {
 	cout << "Merging dot product into new ScalarField of level 8 took " << duration << "ms.\n";
 
 	t1 = high_resolution_clock::now();
-	x.convert<Vec3>(v1,[](coord_t c, VectorField3 &s)->data_t {
+	x.convert<Vec3>(v1,[](coord_t c, VectorField3Base &s)->data_t {
 		return s.get(c).length();
 	});
 
