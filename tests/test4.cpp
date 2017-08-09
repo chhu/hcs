@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 	// Optional play with refinement / coarsening
 	//v2.refineTo(h2.createFromList({0,3,1,1,1,1,1,1,1}));
 	v2.propagate(); // averages all lower-level coords
-	v2.coarse(h2.createFromList({1,2,3}));
+	//v2.coarse(h2.createFromList({1,2,3}));
 	x2.takeStructure(v2);
 
 	cout << v2.getHighestLevel() << endl;

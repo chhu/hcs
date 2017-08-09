@@ -40,6 +40,7 @@
 #include "tensor.hpp"
 #include "field.hpp"
 #include "sparsefield.hpp"
+#include "densefield.hpp"
 
 using namespace std;
 using namespace chrono;
