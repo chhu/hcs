@@ -356,8 +356,9 @@ public:
 	}
 
 
-	array<coord_t, 1 << dimensions> getCoeffCoords(coord_t coord) {
+	array<coord_t, 1 << dimensions> getCoeffCoords(coord_t coord, int& bc_count) {
 		array<coord_t, 1 << dimensions> result;
+		bc_count = 0;
 		uint16_t high_part = extract(coord, 0); 	//
 		coord_t origin = ReduceLevel(coord);
 
@@ -376,10 +377,30 @@ public:
 					bc_hit = true;
 				}
 			}
-			if (bc_hit)
+			if (bc_hit) {
+				bc_count++;
 				continue;
+			}
 			result[i] = current;
 		}
+		return result;
+	}
+
+	array<pair<coord_t, data_t>, 1 << dimensions> getCoeffs2(coord_t coord) {
+		array<pair<coord_t, data_t>, 1 << dimensions> result;
+		int bc_involved;
+		auto interpolation_coords = getCoeffCoords(coord, bc_involved);
+		if (bc_involved > 1) {
+			auto cmap = getCoeffs(coord);
+			int count = 0;
+			for (auto e : cmap)
+				result[count++] = e;
+			for (int i = count; i < 1 << dimensions; i++)
+				result[i] = make_pair<coord_t, data_t>(1, 0.);
+			return result;
+		}
+
+
 		return result;
 	}
 
@@ -463,9 +484,8 @@ public:
 			if (bc_collector_count > 0) {
 				for (uint32_t k = 0; k < bc_collector_count; k++)
 					result[bc_collector[k]] += weight / bc_collector_count;
-				continue;
-			}
-			result[current] += weight;
+			} else
+				result[current] += weight;
 		}
 
 		return result;
@@ -564,11 +584,13 @@ public:
 
 	// Does not decrease below 1
 	bool dec(coord_t &coord) {
-		if (coord <= 1)
-			return true;
 		level_t l = GetLevel(coord);
 		coord--;
 		if (coord < level_bounds[l].first) {
+			if (coord == 0) { // captures l==1 and l==0
+				coord = 1;
+				return true;
+			}
 			coord = level_bounds[l - 1].second;
 			return true;
 		}
