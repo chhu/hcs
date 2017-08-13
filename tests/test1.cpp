@@ -5,17 +5,36 @@
 int main(int argc, char **argv) {
 
 	H2 h2;
-H3 h3;
-	coord_t c = h2.createFromList({0,0,0,0,0,0,0,0,0,0}); // Level 10 corner
+	H3 h3;
+	coord_t c = h3.createFromList({0,0,0,0,0,0,0,0,0,0}); // Level 10 corner
 	coord_t origin = c;
 	coord_t current;
 	uint64_t count = 0;
+/*
+	int bcc;
+    c = h3.createFromList({1});
+    auto coords = h3.getCoeffs2(c);
+    for (auto co : coords)
+        cout << h3.toString(co.first) << " " << co.second << endl;
+    cout << endl;
+    auto coords2 = h3.getCoeffs(c);
+    for (auto co : coords2)
+        cout << h3.toString(co.first) << " " << co.second << endl;
 
-	auto coords = h2.getCoeffCoords(c);
-	for (auto co : coords)
-		cout << h2.toString(co) << endl;
+    cout << endl;
+    cout << endl;
+
+    c = h3.createFromList({0,3});
+    coords = h3.getCoeffs2(c);
+    for (auto co : coords)
+        cout << h3.toString(co.first) << " " << co.second << endl;
+    cout << endl;
+    coords2 = h3.getCoeffs(c);
+    for (auto co : coords2)
+        cout << h3.toString(co.first) << " " << co.second << endl;
+
 	return 0;
-
+*/
 	auto t1 = high_resolution_clock::now();
 	for (int i = 0; i < 100000; i++) {
 		while (!h3.IsBoundary(c)) {
@@ -89,7 +108,7 @@ H3 h3;
 	sum = 0;
 
 	for (; c <= c_end; c++) {
-		map<coord_t, data_t> coeffs = h3.getCoeffs(c);
+		auto coeffs = h3.getCoeffs(c);
 		for (auto c : coeffs)
 			sum += c.second;
 		count++;

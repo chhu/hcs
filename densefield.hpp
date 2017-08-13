@@ -287,9 +287,9 @@ public:
     // Empties all data
     void clear() {
         data.clear();
-        data.resize(2, DTYPE(0));
-        max_level = 1;
-        max_coord = 1;
+        //data.resize(2, DTYPE(0));
+        max_level = 0;
+        max_coord = 0;
     }
 
     Field<DTYPE, HCSTYPE>& operator*= (const DenseField<DTYPE, HCSTYPE>& rhs) {

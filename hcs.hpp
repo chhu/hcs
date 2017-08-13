@@ -136,6 +136,20 @@ public:
 			level_bounds[l].first = CreateMinLevel(l);
 			level_bounds[l].second = CreateMaxLevel(l);
 		}
+
+		// Pre-compute weights. The index of this array is a bit-mask:
+		// 3D example MSB->LSB:
+		// Z-direction boundary?, Y-direction boundary?, X-direction boundary?, Z-bit, Y-bit, X-bit = 6 bit, 64 value lookup.
+		for (uint32_t i = 0; i < 1U << (dimensions * 2); i++) {
+		    bitset<32> boundary_part(i >> dimensions);
+            data_t weight = 1;
+            for (uint32_t j = 0; j < dimensions; j++)
+                if (boundary_part[j])
+                    weight *= 0.5;
+                else
+                    weight *= ((i >> j) & 1) ? 0.25 : 0.75;
+            weights_lookup[i] = weight;
+    	}
 	}
 
 	// A type to store a Cartesian position
@@ -154,6 +168,7 @@ public:
 	array<coord_t, dimensions * 2> successor_mask;
 	array<coord_t, dimensions> bmi_mask;
 	array<pair<coord_t, coord_t>, 64> level_bounds; // min-max pair of coords for each level
+	array<data_t, 1U << (dimensions * 2)> weights_lookup; // pre-computed weights for interpolation coeffs
 
 	// Test for most-significant bit
 	static bool IsBoundary(coord_t coord) {
@@ -266,7 +281,8 @@ public:
 	static inline level_t GetLevelBitPosition(coord_t coord) {
 		return (HCS_COORD_BITS - 1 - __count_leading_zeros(coord));
 	}
-
+// 0001  : 1
+// 0100
 private:
 	// Turns the coordinate into an inconsistent state by removing the level-marker bit
 	// Returns the position of the level marker.
@@ -308,8 +324,8 @@ public:
 
 	// Increases the level of coord, setting the highest level to a new sub-coordinate (must be between 0 and part_mask)
 	static coord_t IncreaseLevel(coord_t coord, uint8_t new_level_coord) {
-		if (IsBoundary(coord))
-			return coord;
+		//if (IsBoundary(coord))
+		//	return coord;
 		//assert(new_level_coord < (1U << dimensions));
 		return (coord << dimensions) + new_level_coord;
 	}
@@ -356,9 +372,9 @@ public:
 	}
 
 
-	array<coord_t, 1 << dimensions> getCoeffCoords(coord_t coord, int& bc_count) {
+	array<coord_t, 1 << dimensions> getCoeffCoords(coord_t coord, uint32_t& bc_set) {
 		array<coord_t, 1 << dimensions> result;
-		bc_count = 0;
+		bc_set = 0;
 		uint16_t high_part = extract(coord, 0); 	//
 		coord_t origin = ReduceLevel(coord);
 
@@ -370,41 +386,69 @@ public:
 					continue;
 
 				coord_t prev_current = current;
-				current = getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
+				current = getNeighbor(current, 2 * j + (((high_part >> j) & 1) ^ 1));
 				if (IsBoundary(current)) {
 					result[i] = current;
 					current = prev_current;
+					bc_set |= 1U << j;
 					bc_hit = true;
 				}
 			}
 			if (bc_hit) {
-				bc_count++;
 				continue;
 			}
 			result[i] = current;
 		}
+		bc_set <<= dimensions;
 		return result;
 	}
 
-	array<pair<coord_t, data_t>, 1 << dimensions> getCoeffs2(coord_t coord) {
+	array<pair<coord_t, data_t>, 1 << dimensions> getCoeffs(coord_t coord) {
 		array<pair<coord_t, data_t>, 1 << dimensions> result;
-		int bc_involved;
-		auto interpolation_coords = getCoeffCoords(coord, bc_involved);
-		if (bc_involved > 1) {
-			auto cmap = getCoeffs(coord);
-			int count = 0;
-			for (auto e : cmap)
-				result[count++] = e;
-			for (int i = count; i < 1 << dimensions; i++)
-				result[i] = make_pair<coord_t, data_t>(1, 0.);
-			return result;
-		}
+        uint16_t high_part = extract(coord, 0);     //
+        coord_t origin = ReduceLevel(coord);
+        uint32_t bc_set = 0;
 
+        for (uint32_t i = 0; i < (1 << dimensions); i++) {
+            coord_t current = origin;
+            uint32_t bcc = 0;
+            bool bc_hit = false;
 
-		return result;
+            for (uint32_t j = 0; j < dimensions; j++) {
+                if (((i >> j) & 1) == 0)
+                    continue;
+
+                coord_t prev_current = current;
+                current = getNeighbor(current, 2 * j + (((high_part >> j) & 1) ^ 1));
+                if (IsBoundary(current)) {
+                    result[i].first = current;
+                    current = prev_current;
+                    bc_set |= 1U << j;
+                    bc_hit = true;
+                }
+            }
+            if (bc_hit) {
+                continue;
+            }
+            result[i].first = current;
+        }
+        if (__builtin_popcount(bc_set) > 1) {
+            auto coeffs = getCoeffs2(coord, bc_set);
+            int i = 0;
+            for (auto coeff : coeffs)
+                result[i++] = coeff;
+            while (i < result.size()) {
+                result[i++] = make_pair(result[0].first, 0.);
+            }
+        } else {
+            bc_set <<= dimensions;
+            for (uint32_t i = 0; i < (1 << dimensions); i++)
+                result[i].second = weights_lookup[bc_set +i];
+        }
+        return result;
 	}
 
-	map<coord_t, data_t> getCoeffs(coord_t coord) {
+	map<coord_t, data_t> getCoeffs2(coord_t coord, uint32_t boundary_quench = 0) {
 		map<coord_t, data_t> result;
 		// Spawn a rectangle of lower-level coords around missing coord
 		// A (hyper)cubical interpolation (2D bi-linear, 3D tri-linear,...) is the best choice,
@@ -451,24 +495,17 @@ public:
 		uint16_t high_part = extract(coord, 0); 	//
 		coord_t origin = ReduceLevel(coord);
 
-		array<bool, 1 << dimensions> boundary_quench;
-		for (uint8_t j = 0; j < dimensions; j++) {
-			bool plus = ((high_part >> j) & 1);
-			boundary_quench[j] = IsBoundary(getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
-		}
+		if (boundary_quench == 0)
+            for (uint8_t j = 0; j < dimensions; j++)
+                boundary_quench |= uint32_t(IsBoundary(getNeighbor(origin, 2 * j + ((high_part >> j) & 1) ^ 1))) << j;
+		boundary_quench <<= dimensions;
 
 		for (uint32_t i = 0; i < (1 << dimensions); i++) {
 			coord_t current = origin;
 			array<coord_t, dimensions> bc_collector;
 			uint32_t bc_collector_count = 0;
 
-			data_t weight = 1;
-
-			for (uint32_t j = 0; j < dimensions; j++)
-				if (boundary_quench[j])
-					weight *= 0.5;
-				else
-					weight *= ((i >> j) & 1) ? 0.25 : 0.75;
+			data_t weight = weights_lookup[boundary_quench + i];
 
 			for (uint32_t j = 0; j < dimensions; j++) {
 				if (((i >> j) & 1) == 0)

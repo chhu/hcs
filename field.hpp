@@ -253,98 +253,18 @@ public:
                     coeffs.insert(partial.begin(), partial.end());
                 }
             }
-        } else {
-
-            //typename HCSTYPE::neighbor_t ne;
-            // Spawn a rectangle of lower-level coords around missing coord
-            // A (hyper)cubical interpolation (2D bi-linear, 3D tri-linear,...) is the best choice,
-            // simplexes (triangle, tetrahedron, ...) are not unique in orthogonal spaced coordinates.
-            // The neighborhood-search that returns 2^D coordinates that cover our coord is
-            // surprisingly straight forward, and the interpolation factors follow the same schema.
-            // The originating coord is the one from reducing coord. It is always our closest corner,
-            // should therefore get the highest interpolation factor.
-            // From there the high_part of coord determines the first D search directions.
-            // Hypercube search pattern that surrounds coord from a lower level:
-            // 2D: Requires 4 coords (box). The first is _aways_ the level-reduced version of
-            //	   coord itself, others are determined by the reduced direction (high_part) of coord.
-            // high_part = 0b11 -> X+ Y+ (X+)Y+ <<- SAME ->> (Y+)X+  = 3 neighbors
-            // 			   0b00 -> X- Y- (X-)Y- <<- SAME ->> (Y-)X-
-            // 			   0b01 -> X+ Y- (X+)Y- <<- SAME ->> (Y-)X+
-            // Coords 3D : Box with 8 corners, one is known.
-            // 0b101 -> X+ Y- Z+ (X+)Y- (X+)Z+ (Y-)Z+ ((X+)Y-)Z+
-            //        The order is not important. Many combinations lead to the same coord.
-            //		  This combination follows a bit-order from ordinary counting!
-            //		  Three bits for three dimensions, the order is not important, the
-            //		  neighborhood direction from high_part is!
-            //        X+ Y- Z+
-            //        0  0  0     (nothing, the origin point)
-            //        0  0  1     Z+
-            //        0  1  0     Y-
-            //		  0  1  1     Y- -> Z+
-            //	      1  0  0     X+
-            //		  1  0  1     X+ -> Z+
-            //        1  1  0     X+ -> Y-  (the neighbor of X+ in Y- direction)
-            //		  1  1  1     X+ -> Y- -> Z+ (the one on the opposite site)
-            // Weights 3D:
-            //     0 = 0.75, 1=0.25
-            //        0  0  0  =  0.75³         = 0.4219
-            //        0  0  1  =  0.25  * 0.75² = 0.1406
-            //        0  1  0  =  0.25  * 0.75² = 0.1406
-            //        0  1  1  =  0.25² * 0.75  = 0.0469
-            //		  1  0  0  =  0.25  * 0.75² = 0.1406
-            //        1  0  1  =  0.25² * 0.75  = 0.0469
-            //        1  1  0  =  0.25² * 0.75  = 0.0469
-            //        1  1  1  =  0.25³         = 0.0156
-            //						TOTAL	    = 1 :)
-            // This principle is universal for all dimensions!
-            uint16_t high_part = hcs.extract(coord, 0); 	//
-            coord_t origin = hcs.ReduceLevel(coord);
-            //hcs.getNeighbors(origin, ne);
-            array<bool, 64> boundary_quench;
-
-
-            for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
-                bool plus = ((high_part >> j) & 1);
-                boundary_quench[j] = hcs.IsBoundary(hcs.getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
-            }
-
-
-            array<tuple<coord_t, data_t, int>, 64> collection;
-            for (uint8_t i = 0; i <= hcs.part_mask; i++) {
-                coord_t current = origin;
-                std::get<2>(collection[i]) = 0;
-                int boundaries_involved = 0;
-                vector<coord_t> bc_collector;
-
-                data_t weight = 1;
-
-                for (uint8_t j = 0; j < hcs.GetDimensions(); j++)
-                    weight *= boundary_quench[j] ? 0.5 : (((i >> j) & 1) ? 0.25 : 0.75);
-
-
-                for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
-                    if (((i >> j) & 1) == 0)
-                        continue;
-
-                    coord_t prev_current = current;
-                    current = hcs.getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
-                    if (hcs.IsBoundary(current)) {
-                        bc_collector.push_back(current);
-                        current = prev_current;
-                    }
-                }
-
-                if (!bc_collector.empty()) {
-                    for (auto bcc : bc_collector)
-                        coeffs[bcc] += weight / bc_collector.size();
+        } else { // coord does not exist
+            // ask HCS for underlying coeffs
+            auto sub_coeffs = hcs.getCoeffs(coord);
+            for (auto sub_coeff : sub_coeffs) {
+                coord_t &current = sub_coeff.first;
+                data_t &weight = sub_coeff.second;
+                if (weight == 0)
                     continue;
-                }
-
                 bool current_exists = exists(current);
                 if (!current_exists || (current_exists && !isTop(current) && !use_non_top)) {
                     // we either have a non-existent coord or an existing non-top coord that we shall not use.
                     coeff_map_t partial;
-                    //coeff_down_count++;
                     getCoeffs(current, partial, use_non_top, recursion + 1);
                     for (auto &coeff : partial)
                         coeffs[coeff.first] += coeff.second * weight;

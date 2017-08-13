@@ -61,7 +61,6 @@ int main(int argc, char **argv) {
 		//x.getCoeffs(c, coeffs, use_non_top);
 		//auto coeffs = h2.getCoeffCoords(c);
 		auto coeffs = h2.getCoeffs(c);
-		auto coeffc = h2.getCoeffCoords(c);
 		int count =  0;
 		data_t sum = 0;
 		for (auto coeff : coeffs) {
@@ -71,10 +70,6 @@ int main(int argc, char **argv) {
 
 		}
 		count =  0;
-		for (auto coeff : coeffc) {
-			cout << "Coeff " << count++ << ": " << h2.toString(coeff) << endl;
-
-		}
 		/*
 
 		cout << "Non-Existent recursive calls: " << x.coeff_down_count <<

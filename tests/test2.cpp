@@ -3,7 +3,7 @@
 int main(int argc, char **argv) {
 
 //	H3 h;
-	ScalarField3 x,o,m;
+	ScalarField3 x, o,m;
 
 	x.createEntireLevel(8);
 	x = 111;

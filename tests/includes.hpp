@@ -33,6 +33,7 @@
 #include <memory>
 #include <chrono>
 #include <functional>
+#include <bitset>
 
 
 // Own includes
@@ -51,7 +52,7 @@ typedef HCS<3> H3;  // 3D
 typedef HCS<4> H4;  // 4D
 typedef HCS<5> H5;  // 5D
 
-#define FIELD_TYPE SparseField
+#define FIELD_TYPE DenseField
 //typedef SparseField FIELD_TYPE;
 typedef FIELD_TYPE<data_t, H1> ScalarField1; // 1D scalar field type
 typedef FIELD_TYPE<data_t, H2> ScalarField2;
