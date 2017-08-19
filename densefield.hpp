@@ -34,6 +34,10 @@ public:
 
     DenseField() : DenseField(HCSTYPE()) {}
 
+    DenseField(level_t level) : DenseField(HCSTYPE()) {
+    	createEntireLevel(level);
+    }
+
 
     // The copy constructor, to make quick copies of the field and its structure
     // Field<??> a = b; Or Field<??> a(b);
@@ -74,7 +78,7 @@ public:
     // C++ goodies, with this operator you can iterate over all existing coords in a field
     class DenseIterator : public Field<DTYPE, HCSTYPE>::CustomIterator {
     public:
-        DenseIterator(DenseField<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : current(1), field(field), only_level(only_level), top_only(top_only), end_coord(1) {
+        DenseIterator(DenseField<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : current(1), field(field), only_level(only_level), top_only(top_only), end_coord(1), current_pair(0, intermediate), current_idx(0) {
             if (field == NULL)
                 return;
             hcs = field->hcs;
@@ -91,31 +95,40 @@ public:
                 current = hcs.CreateMinLevel(field->max_level);
             else
                 current = 1;
+            current_idx = hcs.coord2index(current);
         }
 
-        virtual pair<coord_t, DTYPE&> getCurrentPair() {
+        virtual pair<coord_t, DTYPE&>* getCurrentPairPtr() {
             if (this->at_end)
                 throw range_error("Iterator reached end and was queried for value!");
 
-            const size_t idx = field->hcs.coord2index(current);
-            return pair<coord_t, DTYPE&>(current, field->data[idx]);
+            //const size_t idx = field->hcs.coord2index(current);
+            current_pair.~pair<coord_t, DTYPE&>();
+			new(&current_pair) pair<coord_t, DTYPE&>(current, field->data[current_idx]);
+            //current_pair.first = current;
+            return &current_pair;
         }
 
         virtual void increment() {
             if (hcs.inc(current))
                 this->at_end = current > end_coord;
+            current_idx++;
         }
 
         DenseIterator* clone() {
             DenseIterator* result = new DenseIterator(field, this->top_only, only_level);
             result->current = current;
             result->end_coord = end_coord;
+
             return result;
         }
 
     private:
+        DTYPE intermediate;
+        pair<coord_t, DTYPE&> current_pair;
         DenseField<DTYPE, HCSTYPE>* field;
         coord_t current, end_coord;
+        size_t current_idx;
         int only_level;
         bool top_only;
         HCSTYPE hcs;
@@ -172,7 +185,7 @@ public:
     // Does not query coefficients, throws if coord does not exist
     DTYPE& getDirect(coord_t coord) {
         //if (!this->exists(coord))
-         //   throw range_error("[]: Coord does not exist");
+        //   throw range_error("[]: Coord does not exist");
         return data[hcs.coord2index(coord)];
     }
 

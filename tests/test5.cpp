@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 	cout << "Operating on a complete 2D level 4 scalar field, X and Y scaled as unit-cube.\nPrints interpolation coeffs for a provided coord.\n";
 	cout << "Value of the field is set to its X position.\n";
 
-	ScalarField2 x;
+	SparseScalarField2 x;
 	x.createEntireLevel(4);
 	x.bracket_behavior = ScalarField2::BR_INTERP;
 	for (auto e : x) {

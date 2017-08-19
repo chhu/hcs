@@ -37,6 +37,10 @@ public:
 
     Field() : Field(HCSTYPE()) {}
 
+    Field(level_t level) : Field(HCSTYPE()) {
+    	createEntireLevel(level);
+    }
+
     virtual ~Field() {}
 
     // Any other type of Field is a friend.
@@ -75,7 +79,7 @@ public:
     public:
         CustomIterator() : at_end(true) {}
         virtual void increment() { cerr << "CI: INC CALLED\n"; throw bad_function_call();};
-        virtual pair<coord_t, DTYPE&> getCurrentPair() { cerr << "CI: GET CALLED\n"; throw bad_function_call();};
+        virtual pair<coord_t, DTYPE&>* getCurrentPairPtr() { cerr << "CI: GET CALLED\n"; throw bad_function_call();};
         virtual CustomIterator* clone() {  cerr << "CI: CLONE CALLED\n"; throw bad_function_call();};
         bool at_end;
     };
@@ -102,8 +106,8 @@ public:
             return !ci->at_end;
         }
 
-        pair<coord_t, DTYPE&> operator* () const { return ci->getCurrentPair();};
-        pair<coord_t, DTYPE&>* operator-> () const { return &ci->getCurrentPair();};
+        pair<coord_t, DTYPE&> operator* () const { return *ci->getCurrentPairPtr();};
+        pair<coord_t, DTYPE&>* operator-> () const { return ci->getCurrentPairPtr();};
 
         Iterator& operator++ () { ci->increment(); return *this;};
     };
@@ -158,63 +162,20 @@ public:
                 }
             }
         } else {
-
-            uint16_t high_part = hcs.extract(coord, 0);
-            coord_t origin = hcs.ReduceLevel(coord);
-
-            array<bool, 64> boundary_quench;
-
-            for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
-                bool plus = ((high_part >> j) & 1);
-                boundary_quench[j] = hcs.IsBoundary(hcs.getNeighbor(origin, 2 * j + (plus ? 0 : 1)));
-            }
-
-            for (uint8_t i = 0; i <= hcs.part_mask; i++) {
-                coord_t current = origin;
-
-                data_t weight = 1;
-
-                for (uint8_t j = 0; j < hcs.GetDimensions(); j++)
-                    weight *= boundary_quench[j] ? 0.5 : (((i >> j) & 1) ? 0.25 : 0.75);
-
-                set<coord_t> boundary_shares;
-
-                for (uint8_t j = 0; j < hcs.GetDimensions(); j++) {
-                    if (((i >> j) & 1) == 0)
-                        continue;
-
-                    coord_t prev_current = current;
-                    current = hcs.getNeighbor(current, 2 * j + (((high_part >> j) & 1) ? 0 : 1));
-                    if (hcs.IsBoundary(current)) {
-                        boundary_shares.insert(current);
-                        current = prev_current;
-                    }
-                }
-
-
-                // get coeffs for current
-
-                if (!boundary_shares.empty()) {
-                    for (auto b_coord : boundary_shares) {
-                        uint8_t boundary_index = hcs.GetBoundaryDirection(b_coord);
-                        if (boundary[boundary_index] != nullptr)
-                            result += boundary[boundary_index](this, b_coord) * (weight / (data_t)boundary_shares.size()); // Ask the provided boundary callback
-                    }
-                    continue;
-                }
-
+        	auto coeffs = hcs.getCoeffs(coord);
+        	for (auto coeff : coeffs) {
+        		coord_t current = coeff.first;
+        		data_t weight = coeff.second;
                 bool current_exists = exists(current);
                 if (!current_exists || (current_exists && !isTop(current) && !use_non_top)) {
                     // we either have a non-existent coord or an existing non-top coord that we shall not use.
                     DTYPE partial = 0;
-                    //coeff_down_count++;
                     get(current, partial, use_non_top);
-                    //upscale_cache[current] = partial;
                     result += partial * weight;
                 } else { // current_exists = true in this branch, so _current is valid.
                     result += getDirect(current) * weight;
                 }
-            }
+        	}
         }
     }
 

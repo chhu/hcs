@@ -7,12 +7,11 @@ int main(int argc, char **argv) {
 
 	H2 h2;  // The 2D coordinate system
 
-	ScalarField2 x2;
-	VectorField2 v2;
 
 	level_t max_level = 9;
-	v2.createEntireLevel(max_level);  // 2D box with 256x256 vectors
-	x2.createEntireLevel(max_level);
+	DenseScalarField2 x2(max_level);
+	DenseVectorField2 v2(max_level);
+
 	// Generate simple divergence free vector field {Y, -X}
 	for (auto e : v2) { 
 		H2::pos_t pos = h2.getPosition(e.first);
@@ -25,7 +24,6 @@ int main(int argc, char **argv) {
 	//v2.refineTo(h2.createFromList({0,3,1,1,1,1,1,1,1}));
 	v2.propagate(); // averages all lower-level coords
 	//v2.coarse(h2.createFromList({1,2,3}));
-	x2.takeStructure(v2);
 
 	cout << v2.getHighestLevel() << endl;
 	
@@ -45,13 +43,13 @@ int main(int argc, char **argv) {
 	write_pgm("test4.pgm", x2, max_level);
 
 	// turn vector field into scalar field containing only x (or u) component
-	x2.convert<Vec2>(v2, [](coord_t c, VectorField2Base &v)->data_t {
+	x2.convert<Vec2>(v2, [](coord_t c, VectorField2 &v)->data_t {
 		return v.get(c).x;
 	});
 	x2.propagate();	// convert() operates on TLCs only
 	write_pgm("test4x.pgm", x2, max_level);
 
-	x2.convert<Vec2>(v2, [](coord_t c, VectorField2Base &v)->data_t {
+	x2.convert<Vec2>(v2, [](coord_t c, VectorField2 &v)->data_t {
 		return v[c].y;
 	});
 	x2.propagate();

@@ -38,6 +38,11 @@ private:
 
     SparseField() : SparseField(HCSTYPE()) {}
 
+    SparseField(level_t level) : SparseField(HCSTYPE()) {
+    	createEntireLevel(level);
+    }
+
+
 
     // The copy constructor, to make quick copies of the field and its structure
     // Field<??> a = b; Or Field<??> a(b);
@@ -92,7 +97,7 @@ private:
  public:
     class SparseIterator : public Field<DTYPE, HCSTYPE>::CustomIterator {
     public:
-        SparseIterator(SparseField<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : global_index(0), field(field), bucket(NULL), bucket_index(0), only_level(only_level), top_only(top_only) {
+        SparseIterator(SparseField<DTYPE, HCSTYPE>* field, bool top_only = false, int only_level = -1) : field(field), bucket(NULL), bucket_index(0), only_level(only_level), top_only(top_only), current_pair(0, intermediate) {
             map_iter = field->data.begin();
             if (only_level >= 0) {
                 while (map_iter != field->data.end()) {
@@ -114,10 +119,12 @@ private:
             }
         }
 
-        virtual pair<coord_t, DTYPE&> getCurrentPair() {
+        virtual pair<coord_t, DTYPE&>* getCurrentPairPtr() {
             if (this->at_end)
                 throw range_error("Iterator reached end and was queried for value!");
-            return pair<coord_t, DTYPE&>(bucket->start + bucket_index, bucket->data[bucket_index]);  // This should not happen... Other containers return garbage
+            current_pair.~pair<coord_t, DTYPE&>();
+			new(&current_pair) pair<coord_t, DTYPE&>(bucket->start + bucket_index, bucket->data[bucket_index]);
+            return &current_pair;
         }
 
         virtual void increment() {
@@ -127,8 +134,7 @@ private:
                  } while (!this->at_end && !bucket->top[bucket_index]);
              } else
                  increment2();
-             global_index++;
-         }
+        }
 
         SparseIterator* clone() {
             SparseIterator* result = new SparseIterator(field, this->top_only, only_level);
@@ -158,9 +164,11 @@ private:
 
          bool top_only;
          map_iter_t map_iter;
-         size_t global_index, bucket_index;
+         size_t bucket_index;
          int only_level;
          Bucket *bucket;
+         DTYPE intermediate; // first ref in current_pair
+         pair<coord_t, DTYPE&> current_pair;
          SparseField<DTYPE, HCSTYPE> *field;
     };
 
@@ -443,6 +451,16 @@ private:
                 bn->get(c) = 0;
             data[b->start] = bn;
         }
+    }
+
+    template <typename DTYPE2>
+    void takeStructure(Field<DTYPE2, HCSTYPE> &f) {
+    	// could be slow...
+    	auto old_bracket_behavior = this->bracket_behavior;
+    	this->bracket_behavior = Field<DTYPE,HCSTYPE>::BR_REFINE;
+    	for (auto it = f.begin(true); it != f.end(); ++it) {
+    		refineTo(it->first);
+    	}
     }
 
     // Tests if the provided field has the same structure.

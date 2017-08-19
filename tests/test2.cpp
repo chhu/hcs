@@ -3,12 +3,10 @@
 int main(int argc, char **argv) {
 
 //	H3 h;
-	ScalarField3 x, o,m;
 
-	x.createEntireLevel(8);
+	DenseScalarField3 x(8), o(8), m(8);
+
 	x = 111;
-    o.createEntireLevel(8);
-    m.createEntireLevel(8);
 	o = 89;
 	m = x + o;
 	cout << m[1] << endl;
@@ -49,8 +47,8 @@ int main(int argc, char **argv) {
 	x.clear();
 	H3 h3;
 
-	VectorField3 v1;
-	VectorField3 v2;
+	DenseVectorField3 v1;
+	DenseVectorField3 v2;
 	//ScalarField3 x;
 	cout << "3D - level 8 test, fully populated 256x256x256 box\n" << endl;
 
@@ -88,7 +86,7 @@ int main(int argc, char **argv) {
 	cout << "Merging dot product into new ScalarField of level 8 took " << duration << "ms.\n";
 
 	t1 = high_resolution_clock::now();
-	x.convert<Vec3>(v1,[](coord_t c, VectorField3Base &s)->data_t {
+	x.convert<Vec3>(v1,[](coord_t c, VectorField3 &s)->data_t {
 		return s.get(c).length();
 	});
 
@@ -97,7 +95,7 @@ int main(int argc, char **argv) {
 	cout << "Converting vector field into new ScalarField of level 8 took " << duration << "ms.\n";
 
 	t1 = high_resolution_clock::now();
-	ScalarField3 y = x;
+	DenseScalarField3 y = x;
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Copy of ScalarField of level 8 took " << duration << "ms.\n";
@@ -114,8 +112,7 @@ int main(int argc, char **argv) {
 	duration = duration_cast<milliseconds>(t2-t1).count();
 	cout << "Multiply *= ScalarField of level 8 took " << duration << "ms.\n";
 
-	ScalarField3 l7s;
-	l7s.createEntireLevel(7);
+	DenseScalarField3 l7s(7);
 	t1 = high_resolution_clock::now();
 	y *= l7s;
 	t2 = high_resolution_clock::now();
@@ -132,8 +129,8 @@ int main(int argc, char **argv) {
 	cout << "Multiply *= ScalarField of level 8 with level 6 took " << duration << "ms.\n";
 */
 	// Setup raw-upscale test
-	HCS<6> h;
-	const int source_level = 3;
+	HCS<3> h;
+	const int source_level = 7;
 
 	// Source Field
 	coord_t ls_min = h.CreateMinLevel(source_level);

@@ -286,7 +286,7 @@ public:
 private:
 	// Turns the coordinate into an inconsistent state by removing the level-marker bit
 	// Returns the position of the level marker.
-	static level_t RemoveLevel(coord_t &coord) {
+	static inline level_t RemoveLevel(coord_t &coord) {
 		level_t bit_pos = GetLevelBitPosition(coord);
 #ifdef __BMI2__
 		coord = _bzhi_u64(coord, bit_pos);
@@ -297,7 +297,7 @@ private:
 	}
 
 	// Remove bits for level
-	static coord_t RemoveLevel(coord_t coord, level_t level) {
+	static inline coord_t RemoveLevel(coord_t coord, level_t level) {
 #ifdef __BMI2__
 		coord = _bzhi_u64(coord, level * dimensions);
 #else
@@ -433,6 +433,7 @@ public:
             result[i].first = current;
         }
         if (__builtin_popcount(bc_set) > 1) {
+        // if (bc_set > 0) { // for impls that don't have popcount
             auto coeffs = getCoeffs2(coord, bc_set);
             int i = 0;
             for (auto coeff : coeffs)

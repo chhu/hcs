@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
 //	cout << h2.toString(h2.getNeighbor(1, 2)) << endl;
 //	cout << h3.toString(h3.getNeighbor(1, 5)) << endl;
 //	return 0;
-	ScalarField3 f;
-	ScalarField2 u;
+	SparseScalarField3 f;
+	SparseScalarField2 u;
 	/*
 	ScalarField1 x;
 	x.createEntireLevel(2);
@@ -78,8 +78,8 @@ int main(int argc, char **argv) {
 	// BC 0 = BC 1 = reflect (X+ X-
 	// BC 3 = 0 (default) (Y+)
 	// BC 2 = 1 (Y-)
-	u.boundary[2] = [](ScalarField2Base *self, coord_t cc)->data_t { return 1;};
-	u.boundary[0] = u.boundary[1] = [](ScalarField2Base *self, coord_t cc)->data_t { coord_t c = self->hcs.removeBoundary(cc); return self->get(c);};
+	u.boundary[2] = [](ScalarField2 *self, coord_t cc)->data_t { return 1;};
+	u.boundary[0] = u.boundary[1] = [](ScalarField2 *self, coord_t cc)->data_t { coord_t c = self->hcs.removeBoundary(cc); return self->get(c);};
 
 	write_pgm("test31.pgm", u, 10);
 	write_pgm_level("test32.pgm", u);

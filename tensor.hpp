@@ -140,7 +140,7 @@ template <typename T, unsigned char D> Tensor1<T, D> operator- (const Tensor1<T,
 { Tensor1<T, D> result = lhs; result -= val; return result;}
 
 template <typename T, unsigned char D> bool operator< (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs)
-{ return lhs.mag() < rhs.mag(); }
+{ return lhs.norm() < rhs.norm(); }
 
 /*
 template <typename T, unsigned char D> valarray<bool> operator== (const Tensor1<T, D>& lhs, const Tensor1<T, D>& rhs);
