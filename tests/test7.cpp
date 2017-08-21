@@ -13,26 +13,21 @@ int main(int argc, char **argv) {
 
 	// Dimension setup
 	typedef H2 HCS;
-    typedef ScalarField2 ScalarField;
-    typedef VectorField2 VectorField;
-    typedef ScalarField2Base ScalarFieldBase;
-    typedef VectorField2Base VectorFieldBase;
+    typedef DenseScalarField2 ScalarField;
+    typedef DenseVectorField2 VectorField;
+    typedef ScalarField2 ScalarFieldBase;
+    typedef VectorField2 VectorFieldBase;
 	typedef Vec2 Vec;
 
 	// Resolution setup
-	const int max_level = 8;	// Max level for "C" field
-	const int min_level = 4;	// Min level for "C" field
+	const int c_level = 8;	// Max level for "C" field
 	const int vel_level = 4;	// Level for velocity field
 
 
 	HCS hcs;
 
-	ScalarField c;
-	VectorField v;
-
-	c.createEntireLevel(max_level);
-	v.createEntireLevel(vel_level);
-
+	ScalarField c(c_level);
+	VectorField v(vel_level);
 
 	// Staging: Set initial conditions for c & v
 	if (HCS::GetDimensions() == 1) {
@@ -45,7 +40,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	coord_t coarsed_coord = hcs.createFromPosition(max_level-4,{0.75,0.5});
+	//coord_t coarsed_coord = hcs.createFromPosition(max_level-4,{0.75,0.5});
 
 	if (HCS::GetDimensions() == 2) {
 		// Set velocity to divergence free rotating center
@@ -77,7 +72,7 @@ int main(int argc, char **argv) {
 			return self->get(self->hcs.removeBoundary(c)); // Neumann BC, derivative == 0
 		};
 
-	write_pgm("c_init.pgm", c, max_level);
+	write_pgm("c_init.pgm", c, c_level);
 //return 0;
 	Matrix<data_t, ScalarField> M;
 	Solver<data_t, ScalarField> solver;
@@ -94,9 +89,6 @@ int main(int argc, char **argv) {
 
 		data_t result = 0;
 		Vec vel = v.get(coord);	// interpolated velocity for coord
-		if (l < max_level) {
-			cout << x.hcs.toString(coord) << " " << vel << endl;
-		}
 		ScalarField::coeff_map_t coeffs;
 		for (int neighbor_direction = 0; neighbor_direction < x.hcs.parts; neighbor_direction++) {
 			coord_t ne_coord = x.hcs.getNeighbor(coord, neighbor_direction);
@@ -115,15 +107,8 @@ int main(int argc, char **argv) {
 				if (flux < 0)
 					coeffs[e.first] += flux * e.second;
 			}
-			if (l < max_level) {
-				cout << neighbor_direction << " : " << face_vel << " " << flux << " " << endl;
-			}
 
 		}
-		if (l < max_level) {
-			cout << coeffs[coord] << endl;
-		}
-
 		coeffs[coord] += 1. / time_step;
 		return coeffs;
 	});
@@ -145,7 +130,7 @@ int main(int argc, char **argv) {
 		ScalarField rhs = c * 1. / time_step;  // right-hand-side or b-vector. Solve M * c = rhs
 		int its = solver.solve(M, c, rhs, 1000, 1e-8, 1e-14);  // ... with BiCGStab
 		c.propagate();
-		write_pgm("c_" + to_string(step) + ".pgm", c, max_level);
+		write_pgm("c_" + to_string(step) + ".pgm", c, c_level);
 
 		auto t2 = high_resolution_clock::now();
 		auto duration = duration_cast<milliseconds>(t2-t1).count();

@@ -3,13 +3,13 @@
 
 
 
-ScalarField2 criteria(ScalarField2 &f) {
-	ScalarField2 result;
-	VectorField2 grad_f;
+SparseScalarField2 criteria(SparseScalarField2 &f) {
+	SparseScalarField2 result;
+	SparseVectorField2 grad_f;
 	grad_f.takeStructure(f);
 	result.takeStructure(f);
 	grad<2>(f, grad_f);
-	result.convert<Vec2>(grad_f, [](coord_t c, VectorField2Base &grad_f)->data_t {
+	result.convert<Vec2>(grad_f, [](coord_t c, VectorField2 &grad_f)->data_t {
 		data_t result = 0;
 		/*
 		for (uint16_t i = 0; i < grad_f.hcs.parts; i++) {
@@ -22,7 +22,7 @@ ScalarField2 criteria(ScalarField2 &f) {
 	return result;
 }
 
-void refinement(ScalarField2 &f, ScalarField2 &criteria, data_t sensitivity, level_t lowest_level, level_t highest_level, coord_t start = 1) {
+void refinement(SparseScalarField2 &f, SparseScalarField2 &criteria, data_t sensitivity, level_t lowest_level, level_t highest_level, coord_t start = 1) {
 	H2 &h = f.hcs;
 	level_t current = h.GetLevel(start);
 	data_t critical = criteria.get(start, true) * sensitivity;
@@ -55,10 +55,10 @@ int main(int argc, char **argv) {
 
 	// Dimension setup
 	typedef H2 HCS;
-    typedef ScalarField2 ScalarField;
-    typedef ScalarField2Base ScalarFieldBase;
-    typedef VectorField2 VectorField;
-    typedef VectorField2Base VectorFieldBase;
+    typedef SparseScalarField2 ScalarField;
+    typedef ScalarField2 ScalarFieldBase;
+    typedef SparseVectorField2 VectorField;
+    typedef VectorField2 VectorFieldBase;
 	typedef Vec2 Vec;
 
 	// Resolution setup
@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
 	write_pgm("c_init.pgm", c, max_level);
 
 
-	ScalarField2 gm = criteria(c);
+	auto gm = criteria(c);
 	//write_pgm("crit_init.pgm", gm, max_level);
 	gm.propagate();
 
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
 
 		auto tref1 = high_resolution_clock::now();
 
-		ScalarField2 gm = criteria(c);
+		auto gm = criteria(c);
 		gm.propagate();
 		refinement(c, gm, sense, min_level, max_level);
 		c.propagate();

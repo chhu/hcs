@@ -29,7 +29,7 @@ void poisson(ScalarField1 &x, ScalarField1 &b) {
 	H1 &h =x.hcs;
 	data_t div = x.nElementsTop();
 	//b = b*b;
-	ScalarField1 fake;	// easy way to obtain correct coeffs.
+	DenseScalarField1 fake;	// easy way to obtain correct coeffs.
 //x=b;
 	// zero special since there is no "parent"
 	data_t l_val = x.get(h.getNeighbor(0, 1), true);
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
 
 
 
-	ScalarField1 x, b, err;
+	DenseScalarField1 x, b, err;
 	b.createEntireLevel(max_level);
 	err.createEntireLevel(max_level);
 	x.createEntireLevel(max_level);
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 	b[h.createFromList({0,1,1,1,1,1,1,1})] = 1/2048.;//1 / 1024.;
 	b[h.createFromList({0,1,1,1,1,1,1,1,1})] = 1 / 2048.;
 	//b[h.createFromUnscaled(max_level, {4})] = 1;*/
-	b.boundary[0] = b.boundary[1] = [](ScalarField1Base *self, coord_t cc)->data_t {
+	b.boundary[0] = b.boundary[1] = [](ScalarField1 *self, coord_t cc)->data_t {
 	//	return self->get(self->hcs.removeBoundary(cc));
 		return 0;
 	};

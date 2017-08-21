@@ -96,6 +96,9 @@ public:
             else
                 current = 1;
             current_idx = hcs.coord2index(current);
+            this->currentCoord = current;
+            this->currentValPtr = &field->data[current_idx];
+
         }
 
         virtual pair<coord_t, DTYPE&>* getCurrentPairPtr() {
@@ -113,6 +116,8 @@ public:
             if (hcs.inc(current))
                 this->at_end = current > end_coord;
             current_idx++;
+            this->currentCoord = current;
+            this->currentValPtr = &field->data[current_idx];
         }
 
         DenseIterator* clone() {

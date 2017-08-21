@@ -117,6 +117,8 @@ private:
                         increment2();
 
             }
+            this->currentCoord = bucket->start + bucket_index;
+            this->currentValPtr = &bucket->data[bucket_index];
         }
 
         virtual pair<coord_t, DTYPE&>* getCurrentPairPtr() {
@@ -134,6 +136,8 @@ private:
                  } while (!this->at_end && !bucket->top[bucket_index]);
              } else
                  increment2();
+            this->currentCoord = bucket->start + bucket_index;
+            this->currentValPtr = &bucket->data[bucket_index];
         }
 
         SparseIterator* clone() {
