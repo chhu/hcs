@@ -171,7 +171,7 @@ private:
          size_t bucket_index;
          int only_level;
          Bucket *bucket;
-         DTYPE intermediate; // first ref in current_pair
+         DTYPE intermediate;
          pair<coord_t, DTYPE&> current_pair;
          SparseField<DTYPE, HCSTYPE> *field;
     };

@@ -142,7 +142,7 @@ public:
 		// Z-direction boundary?, Y-direction boundary?, X-direction boundary?, Z-bit, Y-bit, X-bit = 6 bit, 64 value lookup.
 		for (uint32_t i = 0; i < 1U << (dimensions * 2); i++) {
 		    bitset<32> boundary_part(i >> dimensions);
-            data_t weight = 1;
+		    data_t weight = 1;
             for (uint32_t j = 0; j < dimensions; j++)
                 if (boundary_part[j])
                     weight *= 0.5;
@@ -274,11 +274,11 @@ public:
 
 	// Returns the iteration level of this coordinate. Higher level coordinates carry more information.
 	// CAREFUL: The Special bit is not cleared here for performance reasons!
-	static inline level_t GetLevel(coord_t coord) {
+	static inline  __attribute__((always_inline)) level_t GetLevel(coord_t coord) {
 		return GetLevelBitPosition(coord) / dimensions;
 	}
 
-	static inline level_t GetLevelBitPosition(coord_t coord) {
+	static inline  __attribute__((always_inline))  level_t GetLevelBitPosition(coord_t coord) {
 		return (HCS_COORD_BITS - 1 - __count_leading_zeros(coord));
 	}
 // 0001  : 1
@@ -371,7 +371,8 @@ public:
 		return result;
 	}
 
-
+	// Return an array of coordinates that would be involved if provided coord would need to be interpolated.
+	// Much like getCoeffs but without weights
 	array<coord_t, 1 << dimensions> getCoeffCoords(coord_t coord, uint32_t& bc_set) {
 		array<coord_t, 1 << dimensions> result;
 		bc_set = 0;
@@ -403,6 +404,10 @@ public:
 		return result;
 	}
 
+	// Return an array of pairs of [coord, weight] to interpolate provided coord linearly.
+	// The resulting coords are all one lower level than coord. This version is quite fast (~20k 3D interpolations / ms)
+	// but struggles if more than one boundary is involved (boundary weights need to be redistributed), so it calls getCoeffs2
+	// that is an order of magnitude slower (2k 3D interp. / ms) but covers all boundary cases.
 	array<pair<coord_t, data_t>, 1 << dimensions> getCoeffs(coord_t coord) {
 		array<pair<coord_t, data_t>, 1 << dimensions> result;
         uint16_t high_part = extract(coord, 0);     //
@@ -449,6 +454,7 @@ public:
         return result;
 	}
 
+	// Slower version of getCoeffs, covers all scenarios, gets called by getCoeffs eventually
 	map<coord_t, data_t> getCoeffs2(coord_t coord, uint32_t boundary_quench = 0) {
 		map<coord_t, data_t> result;
 		// Spawn a rectangle of lower-level coords around missing coord

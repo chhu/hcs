@@ -105,10 +105,8 @@ public:
             if (this->at_end)
                 throw range_error("Iterator reached end and was queried for value!");
 
-            //const size_t idx = field->hcs.coord2index(current);
             current_pair.~pair<coord_t, DTYPE&>();
-			new(&current_pair) pair<coord_t, DTYPE&>(current, field->data[current_idx]);
-            //current_pair.first = current;
+            new(&current_pair) pair<coord_t, DTYPE&>(current, field->data[current_idx]);
             return &current_pair;
         }
 
