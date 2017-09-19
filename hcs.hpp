@@ -140,6 +140,11 @@ public:
 		// Pre-compute weights. The index of this array is a bit-mask:
 		// 3D example MSB->LSB:
 		// Z-direction boundary?, Y-direction boundary?, X-direction boundary?, Z-bit, Y-bit, X-bit = 6 bit, 64 value lookup.
+        data_t h0_1 = 2. * pow(0.25, 3) - 3 * pow(0.25, 2) + 1; // 0.75 equiv
+        data_t h0_0 = 2. * pow(0.75, 3) - 3 * pow(0.75, 2) + 1; // 0.25 equiv
+        data_t h1_1 = pow(0.25, 3) - 2 * pow(0.25, 2) + 0.25; // 0.75 equiv
+        data_t h1_0 = pow(0.75, 3) - 2 * pow(0.75, 2) + 0.75; // 0.25 equiv
+		//data_t _0_25 =
 		for (uint32_t i = 0; i < 1U << (dimensions * 2); i++) {
 		    bitset<32> boundary_part(i >> dimensions);
 		    data_t weight = 1;
@@ -147,7 +152,8 @@ public:
                 if (boundary_part[j])
                     weight *= 0.5;
                 else
-                    weight *= ((i >> j) & 1) ? 0.25 : 0.75;
+                    //weight *= ((i >> j) & 1) ? 0.25 : 0.75;
+                    weight *= ((i >> j) & 1) ? h0_0 : h0_1;
             weights_lookup[i] = weight;
     	}
 	}
@@ -168,7 +174,9 @@ public:
 	array<coord_t, dimensions * 2> successor_mask;
 	array<coord_t, dimensions> bmi_mask;
 	array<pair<coord_t, coord_t>, 64> level_bounds; // min-max pair of coords for each level
-	array<data_t, 1U << (dimensions * 2)> weights_lookup; // pre-computed weights for interpolation coeffs
+    array<data_t, 1U << (dimensions * 2)> weights_lookup; // pre-computed weights for interpolation coeffs
+    array<data_t, 1U << (dimensions * 2)> cweights_lookup; // pre-computed weights for interpolation coeffs
+    array<data_t, 1U << (dimensions * 2)> dweights_lookup; // pre-computed weights for interpolation coeffs
 
 	// Test for most-significant bit
 	static bool IsBoundary(coord_t coord) {
@@ -410,20 +418,20 @@ public:
 	// that is an order of magnitude slower (2k 3D interp. / ms) but covers all boundary cases.
 	array<pair<coord_t, data_t>, 1 << dimensions> getCoeffs(coord_t coord) {
 		array<pair<coord_t, data_t>, 1 << dimensions> result;
-       if (coord == 1) { // coeffs of center coordinate is an average of all boundaries
-            data_t weight = 1./parts;
-            for (int i = 0; i < parts; i++)
-                result[i] = make_pair(getNeighbor(1, i), weight);
-            return result;
-        }
-       uint16_t high_part = extract(coord, 0);     //
+		if (coord == 1) { // coeffs of center coordinate is an average of all boundaries
+		    data_t weight = 1./parts;
+		    for (int i = 0; i < parts; i++)
+		        result[i] = make_pair(getNeighbor(1, i), weight);
+		    return result;
+		}
+		uint16_t high_part = extract(coord, 0);     //
         coord_t origin = ReduceLevel(coord);
         uint32_t bc_set = 0;
-
+        uint32_t bcc_hit = 0;
         for (uint32_t i = 0; i < (1 << dimensions); i++) {
             coord_t current = origin;
             uint32_t bcc = 0;
-            bool bc_hit = false;
+            //bool bc_hit = false;
 
             for (uint32_t j = 0; j < dimensions; j++) {
                 if (((i >> j) & 1) == 0)
@@ -432,36 +440,51 @@ public:
                 coord_t prev_current = current;
                 current = getNeighbor(current, 2 * j + (((high_part >> j) & 1) ^ 1));
                 if (IsBoundary(current)) {
+                    bcc++;
                     result[i].first = current;
                     current = prev_current;
                     bc_set |= 1U << j;
-                    bc_hit = true;
+                    //bc_hit = true;
                 }
             }
-            if (bc_hit) {
-                continue;
+            if (bcc == 0)
+                result[i].first = current;
+            else if (bcc > 1) {
+                result[i].first = 0;
+                bcc_hit++;
             }
-            result[i].first = current;
+
         }
-        if (__builtin_popcount(bc_set) > 1) {
-        // if (bc_set > 0) { // for impls that don't have popcount
-            auto coeffs = getCoeffs2(coord, bc_set);
-            int i = 0;
-            for (auto coeff : coeffs)
-                result[i++] = coeff;
-            while (i < result.size()) {
-                result[i++] = make_pair(result[0].first, 0.);
-            }
-        } else {
-            bc_set <<= dimensions;
-            for (uint32_t i = 0; i < (1 << dimensions); i++)
-                result[i].second = weights_lookup[bc_set +i];
+        data_t total = 0;
+        for (uint32_t i = 0; i < (1 << dimensions); i++)
+            total += result[i].second = result[i].first == 0 ? 0 : weights_lookup[(bc_set << dimensions) + i];
+
+        //uint32_t boundary_count = __builtin_popcount(bc_set); // How many boundaries are in coeff set
+        if (bcc_hit > 0) {
+            data_t remainder = (1. - total) / (result.size() - bcc_hit);
+            for (auto& coeff : result)
+                if (coeff.first != 0)
+                    coeff.second += remainder;
+                else
+                    coeff.first = 1;
+
+            // if (bc_set > 0) { // for impls that don't have popcount
+//            auto coeffs = getCoeffs2(coord, bc_set);
+//            int i = 0;
+//            for (auto coeff : coeffs)
+//                result[i++] = coeff;
+//
+//            while (i < result.size()) {
+//                result[i++] = make_pair(result[0].first, 0.);
+//            }
+
         }
+
         return result;
 	}
 
 	// Slower version of getCoeffs, covers all scenarios, gets called by getCoeffs eventually
-	map<coord_t, data_t> getCoeffs2(coord_t coord, uint32_t boundary_quench = 0) {
+	map<coord_t, data_t> getCoeffs2(coord_t coord, uint32_t boundary_set = 0) {
 		map<coord_t, data_t> result;
 		// Spawn a rectangle of lower-level coords around missing coord
 		// A (hyper)cubical interpolation (2D bi-linear, 3D tri-linear,...) is the best choice,
@@ -508,17 +531,17 @@ public:
 		uint16_t high_part = extract(coord, 0); 	//
 		coord_t origin = ReduceLevel(coord);
 
-		if (boundary_quench == 0)
+		if (boundary_set == 0)
             for (uint8_t j = 0; j < dimensions; j++)
-                boundary_quench |= uint32_t(IsBoundary(getNeighbor(origin, 2 * j + ((high_part >> j) & 1) ^ 1))) << j;
-		boundary_quench <<= dimensions;
-
+                boundary_set |= uint32_t(IsBoundary(getNeighbor(origin, 2 * j + ((high_part >> j) & 1) ^ 1))) << j;
+		boundary_set <<= dimensions;
+		data_t remainder = 0;
 		for (uint32_t i = 0; i < (1 << dimensions); i++) {
 			coord_t current = origin;
 			array<coord_t, dimensions> bc_collector;
 			uint32_t bc_collector_count = 0;
 
-			data_t weight = weights_lookup[boundary_quench + i];
+			data_t weight = weights_lookup[boundary_set + i];
 
 			for (uint32_t j = 0; j < dimensions; j++) {
 				if (((i >> j) & 1) == 0)
@@ -531,14 +554,32 @@ public:
 					current = prev_current;
 				}
 			}
-			if (bc_collector_count > 0) {
+			if (bc_collector_count ==1) {
 				for (uint32_t k = 0; k < bc_collector_count; k++)
 					result[bc_collector[k]] += weight / bc_collector_count;
+			} else if (bc_collector_count > 1) {
+			    remainder += weight;
 			} else
 				result[current] += weight;
 		}
+		if (remainder > 0) {
+		    remainder /= result.size();
+		    for (auto& coeff : result)
+		        coeff.second += remainder;
+		}
 
 		return result;
+	}
+
+	map<coord_t, data_t> getCoeffsCubic(coord_t coord) {
+        map<coord_t, data_t> result;
+        uint32_t bc_set = 0;
+        auto enclosing = getCoeffCoords(coord, bc_set);
+        for (uint32_t i = 0; i < (1 << dimensions); i++) {
+
+        }
+
+        return result;
 	}
 
 	// Create "largest" linear coord for provided level
@@ -727,10 +768,14 @@ public:
 		result << "(" << level << ") [";
 		for (int i = 1; i <= level; i++)
 			result << extract(coord, level - i) << (i < level ? ", " : "]");
-		pos_t pos = getPosition(coord);
+        pos_t pos = getPosition(coord);
+        unscaled_t upos = getUnscaled(coord);
 		result << " (";
-		for (uint8_t d = 0; d < dimensions; d++)
-			result << pos[d] << (d == dimensions-1 ? "": ", ");
+        for (uint8_t d = 0; d < dimensions; d++)
+            result << pos[d] << (d == dimensions-1 ? "": ", ");
+        result << " U:";
+        for (uint8_t d = 0; d < dimensions; d++)
+            result << upos[d] << (d == dimensions-1 ? "": ", ");
 		result << ")";
 		return result.str();
 	}

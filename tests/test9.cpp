@@ -3,64 +3,149 @@
 
 // Dimension setup
 
-void poisson_err(ScalarField1 &err, ScalarField1 &x, ScalarField1 &b) {
+template<int dimensions>
+void poisson_err(Field<data_t, HCS<dimensions> > &err, Field<data_t, HCS<dimensions> > &x, Field<data_t, HCS<dimensions> > &b) {
 	err = x;
-	for (auto e : x) {
-		coord_t c = e.first;
-		data_t &value = e.second;
+	err = 0;
+	data_t norm = 0;
+	for (auto e = x.begin(false); e != x.end(); ++e) {
+		coord_t c = e->first;
+		data_t &value = e->second;
 		data_t dist = x.hcs.getDistance(c, 0);
+		data_t vol = pow(dist, dimensions); // volume of cell
+		data_t area = pow(dist, dimensions - 1); // area of cell-wall
 		data_t sum = 0;
 		for (int ne = 0; ne < x.hcs.parts; ne++) {
 			coord_t ne_coord = x.hcs.getNeighbor(c, ne);
 			data_t ne_value = x.get(ne_coord, true);
-			data_t ne_dist = x.hcs.IsBoundary(ne_coord) ? 0.5 * dist : dist;
-			sum += (ne_value - value) / (ne_dist * ne_dist);
-		}
-		err[c] = b[c] - sum;
-	}
-}
-
-void poisson(ScalarField1 &x, ScalarField1 &b) {
-	level_t highest = x.getHighestLevel();
-//b/=pow(2,highest);
-	//b.subHarmonics();
-	//b.propagate();
-	x.propagate();
-	H1 &h =x.hcs;
-	data_t div = x.nElementsTop();
-	//b = b*b;
-	DenseScalarField1 fake;	// easy way to obtain correct coeffs.
-//x=b;
-	// zero special since there is no "parent"
-	data_t l_val = x.get(h.getNeighbor(0, 1), true);
-	data_t r_val = x.get(h.getNeighbor(0, 0), true);
-	//x[0] = 0.5 * l_val + 0.5 * r_val + b[0];
-	x[0] = b[0] * 0.25;
-	for (level_t l = 1; l <= highest; l++) {
-		data_t level_dist = 0.5/ (1U << l);
-		for (auto it = x.begin(false, l); it != x.end(); ++it) {
-			//cout << x.hcs.toString((*it).first);
-			coord_t coord = (*it).first;
-			data_t &value = (*it).second;
-			value = 0;
-			//value *= level_dist;
-			//data_t b_delta = b[coord];// - bb[x.hcs.ReduceLevel(coord)] ;// / (l + 4);// / (1 );
-			ScalarField1::coeff_map_t coeffs;
-			fake.getCoeffs(coord, coeffs, false);
-			for (auto e : coeffs) {
-				value += x.get(e.first, true) * e.second ;// + b[e.first];//.get(e.first, true) * e.second;
-				//b_delta += b.get(e.first, true) * e.second;
-				//cout << "[ " << h.toString(e.first) << " :: " << e.second << " ]";
+			if (x.hcs.IsBoundary(ne_coord)) {
+			    sum += ((ne_value  - value) * 2 * area) / (dist * vol);
+			} else {
+                sum += ((ne_value  - value) * area) / (dist * vol);
 			}
-
-			//value += b_delta;
-//			b[coord] = value;// + b.get(coord, true) / (l + 2);
-			//cout << " VAL: " << value <<  " B ORIG: " << b[coord] << " B DELTA: " << b_delta /l<< endl;
 		}
-		fake.clear();
-		fake.createEntireLevel(l);
+		err[c] = abs(b[c] - sum);
+		if (x.hcs.GetLevel(c) < 4)
+		    cout << x.hcs.toString(c) << " X " << x[c] << " ERR " << err[c] << endl;
+		norm += sum * sum;
 	}
+	cout << "Residual norm: " << norm << endl;
+	//err.propagate();
 }
+// 1-0.25 + 3 * -0.25
+
+double CINT(double p[4], double x) {
+    return p[1] + 0.5 * x*(p[2] - p[0] + x*(2.0*p[0] - 5.0*p[1] + 4.0*p[2] - p[3] + x*(3.0*(p[1] - p[2]) + p[3] - p[0])));
+}
+
+double bicubic(double p[4][4], double x, double y) {
+    double arr[4];
+    arr[0] = CINT(p[0], y);
+    arr[1] = CINT(p[1], y);
+    arr[2] = CINT(p[2], y);
+    arr[3] = CINT(p[3], y);
+    return CINT(arr, x);
+}
+
+//template<class DTYPE, int dimensions>
+//void laplace(Field<DTYPE, HCS<dimensions> > &x) {
+//    HCS<dimensions> hcs = x.hcs;
+//
+//    for (level_t level = 0; level <= x.getHighestLevel(); level++) {
+//        for (auto it = x.begin(false, level); it != x.end(); ++it) {
+//            const coord_t &coord = (*it).first;
+//            DTYPE &value = (*it).second;
+//            uint32_t bc_set=0;
+//            auto bbox = hcs.getCoeffCoords(coord, bc_set);
+//            coord_t bcc[4][4];
+//            bcc[1][1] = bbox[0];
+//            bcc[2][1] = bbox[1];
+//            bcc[1][2] = bbox[2];
+//            bcc[2][2] = bbox[3];
+//
+//
+//            //value = 0;
+//            /*for (auto coeff : coeffs) {
+//                coord_t xco = coeff.first;
+//                if (hcs.IsBoundary(xco))
+//                   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
+//                value += coeff.second * x.get(xco);
+//            }*/
+//        }
+//    }
+//    cout << "CENTER: " << x[1] << endl;
+//}
+
+template<class DTYPE, int dimensions>
+void laplace(Field<DTYPE, HCS<dimensions> > &x) {
+    HCS<dimensions> hcs = x.hcs;
+
+    for (level_t level = 0; level <= x.getHighestLevel(); level++) {
+        for (auto it = x.begin(false, level); it != x.end(); ++it) {
+            const coord_t &coord = (*it).first;
+            DTYPE &value = (*it).second;
+            auto coeffs = hcs.getCoeffs(coord);
+            //x.correct_neumann(&coeffs[0]);
+            value = 0;
+            for (auto coeff : coeffs) {
+                coord_t xco = coeff.first;
+                //if (hcs.IsBoundary(xco))
+                //   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
+                value += coeff.second * x.get(xco);
+            }
+        }
+    }
+    cout << "CENTER: " << x[1] << endl;
+}
+
+template<class DTYPE, int dimensions>
+void poisson(Field<DTYPE, HCS<dimensions> > &x, Field<DTYPE, HCS<dimensions> > &b) {
+    HCS<dimensions> hcs = x.hcs;
+
+    // Downpropagate b
+    // Zero all non-top
+    for (auto element : b)
+        if (!b.isTop(element.first))
+            element.second = 0;
+
+    for (level_t level = b.getHighestLevel(); level > 0; level--) {
+        for (auto it = b.begin(false, level); it != x.end(); ++it) {
+            const coord_t &coord = (*it).first;
+            DTYPE &value = (*it).second;
+            auto coeffs = hcs.getCoeffs(coord);
+            b.correct_neumann(&coeffs[0]);
+            //value = 0;
+            for (auto coeff : coeffs) {
+                coord_t xco = coeff.first;
+                if (hcs.IsBoundary(xco))
+                    continue;
+                //   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
+                b[xco] += coeff.second * value;
+                //value += coeff.second * x.get(xco);
+            }
+        }
+    }
+
+
+    // Up
+    for (level_t level = 0; level <= x.getHighestLevel(); level++) {
+        for (auto it = x.begin(false, level); it != x.end(); ++it) {
+            const coord_t &coord = (*it).first;
+            DTYPE &value = (*it).second;
+            auto coeffs = hcs.getCoeffs(coord);
+            x.correct_neumann(&coeffs[0]);
+            value = 0;
+            for (auto coeff : coeffs) {
+                coord_t xco = coeff.first;
+                if (hcs.IsBoundary(xco))
+                   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
+                value += coeff.second * x.get(xco) + coeff.second * b.get(xco);
+            }
+        }
+    }
+    cout << "CENTER: " << x[1] << endl;
+}
+
 
 int main(int argc, char **argv) {
 
@@ -71,78 +156,89 @@ int main(int argc, char **argv) {
 	#endif
 
 
-	H1 h;
 
 	// Resolution setup
 	const int max_level = 9;	// Max level for "C" field
 
 
 
-	DenseScalarField1 x, b, err;
-	b.createEntireLevel(max_level);
-	err.createEntireLevel(max_level);
-	x.createEntireLevel(max_level);
+	DenseScalarField2 x(max_level), b(max_level), err(max_level);
 
-	//x.boundary[0] = [](ScalarField1 *self, coord_t cc)->data_t { return 1;};
-
-	x = 0;
-	b = 0;
-	//b[0] = 1/8.;
-	//b[h.createFromList({0})] = 1 / 8.;
-	//b[h.createFromList({1})] = 1 / 8.;
-	//b[h.createFromList({0,1,1,1,1,1,1})] = 1 / 8.;
-	//b[h.createFromList({1,0,0,0,0,0,0})] = 1 / 8.;
-//	b[h.createFromList({1,0})] = 1 / 8.;
-//	b[h.createFromList({1,1})] = 1 / 8.;
-	//b[h.createFromList({0,0})] = 1 / 8.;
-//	b[h.createFromList({0,1})] = 1 / 8.;
-//	b[h.createFromList({0,1,1})] = 1 / (32.*32.);
-	/*
-	b[h.createFromList({0,1,1,1})] = 1 / 64.;
-	b[h.createFromList({0,1,1,1,1})] = 1 / 128.;
-	b[h.createFromList({0,1,1,1,1,1})] = 1 / 256.;
-	b[h.createFromList({0,1,1,1,1,1,1})] = 1 / 512.;
-	b[h.createFromList({0,1,1,1,1,1,1,1})] = 1 / 1024.;
-	b[h.createFromList({0,1,1,1,1,1,1,1,1})] = 1 / 2048.;
+    auto h = x.hcs;
 /*
-	b = 0;
-	b[0] = 1/2048.;//1/4.;
-	b[h.createFromList({0})] = 1/2048.;//1 / 8.;
-	b[h.createFromList({0,1})] = 1/2048.;//1 / 16.;
-	b[h.createFromList({0,1,1})] = 1/2048.;//1 / 32.;
-	b[h.createFromList({0,1,1,1})] = 1/2048.;//1 / 64.;
-	b[h.createFromList({0,1,1,1,1})] = 1/2048.;//1 / 128.;
-	b[h.createFromList({0,1,1,1,1,1})] = 1/2048.;//1 / 256.;
-	b[h.createFromList({0,1,1,1,1,1,1})] = 1/2048.;//1 / 512.;
-	b[h.createFromList({0,1,1,1,1,1,1,1})] = 1/2048.;//1 / 1024.;
-	b[h.createFromList({0,1,1,1,1,1,1,1,1})] = 1 / 2048.;
-	//b[h.createFromUnscaled(max_level, {4})] = 1;*/
-	b.boundary[0] = b.boundary[1] = [](ScalarField1 *self, coord_t cc)->data_t {
-	//	return self->get(self->hcs.removeBoundary(cc));
-		return 0;
-	};
+    uint32_t bcs = 0;
+    coord_t cc = h.createFromList({1,2});
+    cout << h.toString(cc) << endl<<endl;
+    auto ac = h.getCoeffCoords(cc, bcs);
+    for (auto e : ac)
+        cout << h.toString(e) << endl;
+return 0;
+*/
+	b.boundary[0] = x.boundary[0] = [](ScalarField2 *self, coord_t cc)->data_t {
+	    return 0;
+	    coord_t interior = self->hcs.removeBoundary(cc);
+        double y = self->hcs.getPosition(interior)[1];
+        //return y;
+        //return y > 0.5;
+        return sin(y * M_PI);
+    };
+	b.boundary[1] = x.boundary[1] = [](ScalarField2 *self, coord_t cc)->data_t {
+        return 0;
+        coord_t interior = self->hcs.removeBoundary(cc);
+        double y = self->hcs.getPosition(interior)[1];
+        return y;
+        return cos(y * 2 * M_PI);
+    };
+	b.boundary[2] = x.boundary[2] = [](ScalarField2 *self, coord_t cc)->data_t { return 0;};
+	b.boundary[3] = x.boundary[3] = [](ScalarField2 *self, coord_t cc)->data_t { return 1;};
 
-	// B = f(x) = x**3
-	// Analytic solution for Dirichlet = 0: x / 20 - x**5/20
-	//for (auto e : b)
-	//	e.second = pow(h.getPosition(e.first)[0], 3);
-	//b.propagate();
-	//b[h.createFromPosition(max_level, {0.5})] = 1;
-	b = 1;
-	for (int i = 0; i < 1; i++)
-		poisson(x,b);
-	x.propagate();
-	b.propagate();
+    coord_t test = h.createFromList({0});
+    cout << "TARGET " << h.toString(test) << endl;
+    auto coeffs = h.getCoeffs(test);
+    //x.correct_neumann(&coeffs[0]);
+    for (auto coeff : coeffs) {
+        cout << h.toString(coeff.first) << " W: " << coeff.second << endl;
+    };
+    test = h.createFromList({0,0});
+    cout << "TARGET " << h.toString(test) << endl;
+    coeffs = h.getCoeffs(test);
+    //x.correct_neumann(&coeffs[0]);
+    for (auto coeff : coeffs) {
+        cout << h.toString(coeff.first) << " W: " << coeff.second << endl;
+    }
+//return 0;
 
-	poisson_err(err,x,b);
-	//b = 1;
+    // Laplace test
+	laplace<data_t, 2>(x);
 
-	//b.subHarmonics();
+    // Poisson test
+    b = 0;
+    //b[h.createFromUnscaled(9, {256, 256})] = (512 *512);
+    //poisson<data_t, 2>(x, b);
 
+
+
+	poisson_err<2>(err, x, b);
+    write_raw2("test9.raw", x);
+
+	write_pgm("test9.pgm", x, max_level);
+
+    write_pgm("test9_err.pgm", err, max_level);
+    write_raw2("test9_err.raw", err);
+
+    //cout << x[h.createFromPosition(9,{0.75,0.25})] << endl;
+
+    //read_raw2("test9_sol.raw", x, 9);
+    //cout << x[h.createFromPosition(9,{0.75,0.25})] << endl;
+    //x.propagate();
+    //poisson_err<2>(err, x, b);
+    //write_raw2("test9_sol_err.raw", err);
+
+	/*
 	write_txt("test9e.txt", err,false);
 	write_txt("test9.txt", x);
 	write_txt("test9b.txt", b,false);
 
-
+*/
 
 }
