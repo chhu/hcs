@@ -410,7 +410,13 @@ public:
 	// that is an order of magnitude slower (2k 3D interp. / ms) but covers all boundary cases.
 	array<pair<coord_t, data_t>, 1 << dimensions> getCoeffs(coord_t coord) {
 		array<pair<coord_t, data_t>, 1 << dimensions> result;
-        uint16_t high_part = extract(coord, 0);     //
+       if (coord == 1) { // coeffs of center coordinate is an average of all boundaries
+            data_t weight = 1./parts;
+            for (int i = 0; i < parts; i++)
+                result[i] = make_pair(getNeighbor(1, i), weight);
+            return result;
+        }
+       uint16_t high_part = extract(coord, 0);     //
         coord_t origin = ReduceLevel(coord);
         uint32_t bc_set = 0;
 
