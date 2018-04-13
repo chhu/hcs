@@ -14,15 +14,6 @@
  */
 #pragma once
 
-// Own includes
-/*
-#include "hcs.hpp"
-#include "tensor.hpp"
-#include "field.hpp"
-#include "sparsefield.hpp"
-#include "densefield.hpp"
-*/
-
 typedef HCS<1> H1;  // 1D
 typedef HCS<2> H2;  // 2D
 typedef HCS<3> H3;  // 3D
@@ -131,4 +122,39 @@ void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data
 	result.propagate();
 }
 
+/*
+void correct_neumann(pair<coord_t, data_t>* coeffs) {
+    int n_coeffs = 1 << hcs.GetDimensions();
+    int non_neumann_bc = 0;
 
+    for (int i = 0; i < n_coeffs; i++) {
+        if (coeffs[i].second == 0)
+            continue;
+        if (hcs.IsBoundary(coeffs[i].first))
+            if (boundary[hcs.GetBoundaryDirection(coeffs[i].first)] == nullptr) {
+                coord_t wob = hcs.removeBoundary(coeffs[i].first);
+                for (int j = 0; j < n_coeffs; j++) {
+                    if (coeffs[j].first == wob && coeffs[j].second != 0)
+                        coeffs[i].second = coeffs[j].second;
+                }
+                coeffs[i].first = wob;
+            } else
+                non_neumann_bc++;
+    }
+    data_t total = 0;
+    for (int i = 0; i < n_coeffs; i++)
+        total += coeffs[i].second;
+    if (total < 1 && non_neumann_bc > 0) {
+        total = (1 - total) / data_t(non_neumann_bc);
+        for (int i = 0; i < n_coeffs; i++)
+            if (hcs.IsBoundary(coeffs[i].first))
+                coeffs[i].second += total;
+
+    }
+
+        //if (nc > 0 && dc > 0 && nc != dc) {
+
+    //}
+}
+
+*/

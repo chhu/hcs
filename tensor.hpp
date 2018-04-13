@@ -1,7 +1,7 @@
 /*
  * tensor.hpp
  *	
- *	An quick-and-dirty arithmetic wrapper class for vectors (tensors of rank 1, therefore called Tensor1)
+ *	A quick-and-dirty arithmetic wrapper class for vectors (tensors of rank 1, therefore called Tensor1)
  *	The first template argument specifies the data (float) type, the second the dimensions.
  *
  *	Example:
@@ -25,8 +25,7 @@ template <typename T, unsigned char D>
 class Tensor1 {
 // Attributes
 public:
-	// This wastes storage space for D < 3... But I would miss the comfort.
-	// Better Ideas?
+	// This wastes storage space for D < 3... Trade for comfort.
 	union {
 		struct {
 			T x;

@@ -82,13 +82,13 @@ public:
             if (field == NULL)
                 return;
             hcs = field->hcs;
-            if (top_only && only_level > 0)
+            if (top_only && only_level >= 0)
                 throw range_error("Field iterator can only be top_only or only_level, not both.");
             this->at_end = (only_level > field->max_level);
             if (this->at_end)
                 return;
             end_coord = hcs.CreateMaxLevel(field->max_level);
-            if (only_level > 0) {
+            if (only_level >= 0) {
                 current = hcs.CreateMinLevel(only_level);
                 end_coord = hcs.CreateMaxLevel(only_level);
             } else if (top_only)
@@ -277,9 +277,6 @@ public:
         return *this;
     }
 
-    // Arithmetic Ops, preserving structure of current refinement.
-    // Exampe: a * b keeps sparse structure of a and multiplies with (possible) interpolates from b
-    // while b * a keeps sparse structure of b. A generic merge() can specify merged structure and arbitrary ops.
     DenseField<DTYPE, HCSTYPE> operator-() const { DenseField<DTYPE, HCSTYPE> result = *this; for (auto e : result) e.second = -e.second; return result;}
 
     // Clears the field and takes the same coordinate structure as the provided field, without copying their

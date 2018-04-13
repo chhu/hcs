@@ -129,8 +129,7 @@ public:
     // the value set to bracket_behavior applies.
     virtual DTYPE& operator[](coord_t coord) = 0;
 
-    // Do we have a value for this coord? And if yes, make sure it is in _current
-    // A bucket's end coord is its last existing coord
+    // Do we have a value for this coord?
     virtual bool exists(coord_t coord) = 0;
 
     // Does not query coefficients, throws if coord does not exist
@@ -148,7 +147,6 @@ public:
                 result = boundary[boundary_index](this, coord);
             else {
                 result = 0;
-                get(hcs.removeBoundary(coord), result, use_non_top);
             }
             return;
         }
@@ -184,39 +182,6 @@ public:
         }
     }
 
-    void correct_neumann(pair<coord_t, data_t>* coeffs) {
-        int n_coeffs = 1 << hcs.GetDimensions();
-        int non_neumann_bc = 0;
-
-        for (int i = 0; i < n_coeffs; i++) {
-            if (coeffs[i].second == 0)
-                continue;
-            if (hcs.IsBoundary(coeffs[i].first))
-                if (boundary[hcs.GetBoundaryDirection(coeffs[i].first)] == nullptr) {
-                    coord_t wob = hcs.removeBoundary(coeffs[i].first);
-                    for (int j = 0; j < n_coeffs; j++) {
-                        if (coeffs[j].first == wob && coeffs[j].second != 0)
-                            coeffs[i].second = coeffs[j].second;
-                    }
-                    coeffs[i].first = wob;
-                } else
-                    non_neumann_bc++;
-        }
-        data_t total = 0;
-        for (int i = 0; i < n_coeffs; i++)
-            total += coeffs[i].second;
-        if (total < 1 && non_neumann_bc > 0) {
-            total = (1 - total) / data_t(non_neumann_bc);
-            for (int i = 0; i < n_coeffs; i++)
-                if (hcs.IsBoundary(coeffs[i].first))
-                    coeffs[i].second += total;
-
-        }
-
-            //if (nc > 0 && dc > 0 && nc != dc) {
-
-        //}
-    }
     // Do coordinates exist in a higher level?
     virtual bool isTop(coord_t coord) = 0;	// Average all non-top coords from top-level
 
