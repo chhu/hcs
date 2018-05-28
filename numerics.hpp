@@ -43,7 +43,7 @@ typedef DenseField<data_t, H3> DenseScalarField3;
 typedef DenseField<data_t, H4> DenseScalarField4;
 typedef DenseField<data_t, H5> DenseScalarField5;
 
-typedef DenseField<data_t, H1> DenseVectorField1; // 1D scalar field type
+typedef DenseField<data_t, H1> DenseVectorField1; // 1D Vector field type
 typedef DenseField<Vec2, H2> DenseVectorField2;
 typedef DenseField<Vec3, H3> DenseVectorField3;
 typedef DenseField<Vec4, H4> DenseVectorField4;
@@ -55,7 +55,7 @@ typedef SparseField<data_t, H3> SparseScalarField3;
 typedef SparseField<data_t, H4> SparseScalarField4;
 typedef SparseField<data_t, H5> SparseScalarField5;
 
-typedef SparseField<data_t, H1> SparseVectorField1; // 1D scalar field type
+typedef SparseField<data_t, H1> SparseVectorField1; // 1D Vector field type
 typedef SparseField<Vec2, H2> SparseVectorField2;
 typedef SparseField<Vec3, H3> SparseVectorField3;
 typedef SparseField<Vec4, H4> SparseVectorField4;
@@ -74,6 +74,7 @@ void grad(Field<data_t, HCS<dimension> > &source, Field<Tensor1<data_t, dimensio
 	typedef Field<Vec, HX> VectorField;
     typedef Field<data_t, HX> ScalarField;
 
+    result.createEntireLevel(source.getHighestLevel());
 	// strange calling convention because template depends now on another template
 	result.template convert<data_t>(source, [](coord_t c, ScalarField &source)->Vec {
 
@@ -103,6 +104,8 @@ void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data
 	typedef Field<data_t, HX> ScalarField;
     typedef Field<Vec, HX> VectorField;
 
+    cout << "SC\n";
+    result.createEntireLevel(source.getHighestLevel());
 	// strange calling convention because template depends now on another template
 	result.template convert<Vec>(source, [](coord_t c, VectorField &source)->data_t {
 
@@ -122,39 +125,4 @@ void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data
 	result.propagate();
 }
 
-/*
-void correct_neumann(pair<coord_t, data_t>* coeffs) {
-    int n_coeffs = 1 << hcs.GetDimensions();
-    int non_neumann_bc = 0;
 
-    for (int i = 0; i < n_coeffs; i++) {
-        if (coeffs[i].second == 0)
-            continue;
-        if (hcs.IsBoundary(coeffs[i].first))
-            if (boundary[hcs.GetBoundaryDirection(coeffs[i].first)] == nullptr) {
-                coord_t wob = hcs.removeBoundary(coeffs[i].first);
-                for (int j = 0; j < n_coeffs; j++) {
-                    if (coeffs[j].first == wob && coeffs[j].second != 0)
-                        coeffs[i].second = coeffs[j].second;
-                }
-                coeffs[i].first = wob;
-            } else
-                non_neumann_bc++;
-    }
-    data_t total = 0;
-    for (int i = 0; i < n_coeffs; i++)
-        total += coeffs[i].second;
-    if (total < 1 && non_neumann_bc > 0) {
-        total = (1 - total) / data_t(non_neumann_bc);
-        for (int i = 0; i < n_coeffs; i++)
-            if (hcs.IsBoundary(coeffs[i].first))
-                coeffs[i].second += total;
-
-    }
-
-        //if (nc > 0 && dc > 0 && nc != dc) {
-
-    //}
-}
-
-*/

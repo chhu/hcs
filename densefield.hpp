@@ -230,11 +230,8 @@ public:
 
 
     // .. and all levels below.
-    // This routine DELETES everything in the field and is meant as an initializer.
-    // If there are elements present, it throws.
+    // This routine DELETES everything in the field and is meant as an initializer. Fills with DTYPE(0)
     void createEntireLevel(level_t level) {
-        if (data.size() > 2)
-            throw range_error("Not empty!");
 
         max_level = level;
         max_coord = hcs.CreateMaxLevel(level);

@@ -118,34 +118,6 @@ void write_txt(string filename, ScalarField1 &field, bool top_only = true) {
 }
 
 
-void write_raw3(string filename, ScalarField3 &field) {
-    ofstream f(filename);
-    level_t level = field.getHighestLevel();
-    unsigned n = 1U << level;
-    cout << "Writing " << filename << " with " << n << "³ elements.\n";
-    for (int z = 0; z < n; z++)
-        for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++) {
-                coord_t c = field.hcs.createFromUnscaled(level, {x,y,z});
-                f.write((const char *)&field[c], sizeof(data_t));
-            }
-    f.close();
-}
-
-
-void write_raw2(string filename, ScalarField2 &field) {
-    ofstream f(filename);
-    level_t level = field.getHighestLevel();
-    unsigned n = 1U << level;
-    cout << "Writing " << filename << " with " << n << "² elements.\n";
-    for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++) {
-            coord_t c = field.hcs.createFromUnscaled(level, {x,y});
-            f.write((const char *)&field[c], sizeof(data_t));
-        }
-    f.close();
-}
-
 
 void read_raw2(string filename, ScalarField2 &field, level_t level) {
     ifstream f(filename);

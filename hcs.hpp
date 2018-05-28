@@ -122,15 +122,24 @@ public:
 		for (uint32_t i = 0; i < 1U << (dimensions * 2); i++) {
 		    bitset<8> boundary_part(i >> dimensions);
 		    bitset<8> coord_part(i & part_mask);
-		    data_t weight = 1;
 
+		    data_t weight = 1;
             for (uint32_t j = 0; j < dimensions; j++)
                 if (boundary_part[j])
                     weight *= 0.5;
                 else
                     weight *= ((i >> j) & 1) ? 0.25 : 0.75;
-
             weights_lookup[i] = weight;
+
+		    /* INV DIST weighting with p=1
+		    data_t weight = 0;
+            for (uint32_t j = 0; j < dimensions; j++)
+                if (boundary_part[j])
+                    weight = 0.25;
+                else
+                    weight += ((i >> j) & 1) ? 0.75*0.75 : 0.25*0.25;
+            weights_lookup[i] = 1./(sqrt(weight));
+            */
     	}
 
 	}

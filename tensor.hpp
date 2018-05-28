@@ -25,6 +25,7 @@ template <typename T, unsigned char D>
 class Tensor1 {
 // Attributes
 public:
+/*
 	// This wastes storage space for D < 3... Trade for comfort.
 	union {
 		struct {
@@ -42,8 +43,8 @@ public:
 			T phi;
 			T theta;
 		};
-		array<T, D> value{};  // braces guarantee zero init
-	};
+	};*/
+	array<T, D> value{};  // braces guarantee zero init
 
 	// Constructors
 	Tensor1<T, D>() {}
@@ -51,6 +52,17 @@ public:
 	Tensor1<T, D>(initializer_list<T> il) { copy(il.begin(), il.end(), value.begin()); }
 	Tensor1<T, D>(T s) { for (auto &e : value) e = s;}
 
+	T& x() 						{ return value[0]; }
+	T& y() 						{ return value[1]; }
+	T& z() 						{ return value[2]; }
+
+	T& u() 						{ return value[0]; }
+	T& v() 						{ return value[1]; }
+	T& w() 						{ return value[2]; }
+
+	T& r() 						{ return value[0]; }
+	T& phi() 					{ return value[1]; }
+	T& theta() 					{ return value[2]; }
 
 	T norm() const		  		{ return (*this) * (*this);		}
 	T length() const			{ return sqrt(norm());			}
@@ -84,10 +96,10 @@ public:
 		if (D != 2 && D !=3)
 			throw range_error("Tensor1 cross product N mismatch");
 		Tensor1<T, 3> result;
-		result.z = x * P.y - y * P.x;
+		result.z() = x() * P.y() - y() * P.x();
 		if (D == 3) {
-			result.x = y * P.z - z * P.y;
-			result.y = z * P.x - x * P.z;
+			result.x() = y() * P.z() - z() * P.y();
+			result.y() = z() * P.x() - x() * P.z();
 		}
 		return result;
 	} // cross product

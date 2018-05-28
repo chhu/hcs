@@ -308,6 +308,43 @@ public:
         }
     }
 
+    // copies the Field data to linear vector as it would appear in a N-Dim array. if level is omitted, highest is assumed.
+    void toLinear(vector<DTYPE> &out, level_t level = 0) {
+    	level = level == 0? this->getHighestLevel() : level;
+        uint64_t n_single = 1U << level;
+        uint64_t dim = this->hcs.GetDimensions();
+        uint64_t n = pow(n_single, dim);
+        cout << "Writing " << n_single << " with " << n << "² elements.\n";
+        out.resize(n);
+        typename HCSTYPE::unscaled_t cart_unscaled;
+        for (uint64_t i = 0; i < n; i++) {
+        	for (size_t j = 0; j < dim; j++)
+        		cart_unscaled[j]= (n_single - 1) & (i >> (j * level));
+        	coord_t c = this->hcs.createFromUnscaled(level, cart_unscaled);
+        	out[i] = this->get(c);
+        }
+    }
+
+    // RAW LINEAR OUT: UINT32 magic='HCSR', UINT8 dim, UINT16 level, UINT32 bytes_per_element, UINT64 N, N * bytes_per_element values
+    void write(string filename, level_t level = 0) {
+        ofstream f(filename);
+        level = level == 0 ? this->getHighestLevel() : level;
+        vector<DTYPE> out;
+        this->toLinear(out, level);
+        char magic[5] = "HCSR";
+        uint8_t dim = this->hcs.GetDimensions();
+        f.write(magic, 4);
+        f.write((const char *)&dim, 1);
+        f.write((const char *)&level, 2);
+        uint32_t bpe = sizeof(DTYPE);
+        f.write((const char *)&bpe, 4);
+        uint64_t n = out.size();
+        f.write((const char *)&n, 8);
+        f.write((const char *)&out[0], n * bpe);
+
+        f.close();
+    }
+
     // Empties all data
     virtual void clear() = 0;
 

@@ -84,8 +84,8 @@ int main(int argc, char **argv) {
 		HCS::pos_t pos = hcs.getPosition(e.first);
 		pos[0] -= 0.5; // center around 0,0
 		pos[1] -= 0.5;
-		e.second.x = pos[1] * 2;
-		e.second.y = -pos[0] * 2;
+		e.second.x() = pos[1] * 2;
+		e.second.y() = -pos[0] * 2;
 	}
 	v.propagate();
 

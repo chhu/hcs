@@ -17,8 +17,8 @@ int main(int argc, char **argv) {
 		H2::pos_t pos = h2.getPosition(e.first);
 		pos[0] -= 0.5; // center around 0,0
 		pos[1] -= 0.5;
-		e.second.x = pos[1] * 200;
-		e.second.y = -pos[0] * 200;
+		e.second.x() = pos[1] * 200;
+		e.second.y() = -pos[0] * 200;
 	}
 	// Optional play with refinement / coarsening
 	//v2.refineTo(h2.createFromList({0,3,1,1,1,1,1,1,1}));
@@ -44,13 +44,13 @@ int main(int argc, char **argv) {
 
 	// turn vector field into scalar field containing only x (or u) component
 	x2.convert<Vec2>(v2, [](coord_t c, VectorField2 &v)->data_t {
-		return v.get(c).x;
+		return v.get(c).x();
 	});
 	x2.propagate();	// convert() operates on TLCs only
 	write_pgm("test4x.pgm", x2, max_level);
 
 	x2.convert<Vec2>(v2, [](coord_t c, VectorField2 &v)->data_t {
-		return v[c].y;
+		return v[c].y();
 	});
 	x2.propagate();
 	write_pgm("test4y.pgm", x2, max_level);

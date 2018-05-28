@@ -35,92 +35,72 @@ data_t poisson_err(Field<data_t, HCS<dimensions> > &err, Field<data_t, HCS<dimen
 	//cout << "Residual norm: " << norm << endl;
 	return norm;
 }
-// 1-0.25 + 3 * -0.25
 
-template<class DTYPE, int dimensions>
-void poisson(Field<DTYPE, HCS<dimensions> > &x, Field<DTYPE, HCS<dimensions> > &b) {
-    HCS<dimensions> hcs = x.hcs;
+// non-generic test version for 2D only
+void poisson2(DenseScalarField2 &x, DenseScalarField2 &b) {
+    auto hcs = x.hcs;
 
+    DenseVectorField2 grad_x(b.getHighestLevel());
 
-    DenseField<DTYPE, HCS<dimensions> > err_b(b.getHighestLevel());
-    DenseField<DTYPE, HCS<dimensions> > err_return(b.getHighestLevel());
+    x.takeStructure(b);
+    x = b;
 
-    // Downpropagate b
+    // Downpropagate, establish gradient
     // Zero all non-top
-    for (auto element : b)
-        if (!b.isTop(element.first))
+    for (auto element : x)
+        if (!x.isTop(element.first))
             element.second = 0;
 
-    for (level_t level = b.getHighestLevel(); level > 0; level--) {
-        for (auto it = b.begin(false, level); it != x.end(); ++it) {
+    for (level_t level = x.getHighestLevel(); level > 0; level--) {
+        for (auto it = x.begin(false, level); it != x.end(); ++it) {
             const coord_t &coord = (*it).first;
-            DTYPE &value = (*it).second;
+            data_t &value = (*it).second;
+            //Vec2 grad = grad_x[coord];
+
             auto coeffs = hcs.getCoeffs(coord);
-            //b.correct_neumann(&coeffs[0]);
-            //value = 0;
+            data_t sum = 0;
+            for (auto coeff : coeffs)
+                sum += coeff.second;
+
+
             for (auto coeff : coeffs) {
                 coord_t xco = coeff.first;
+
                 if (hcs.IsBoundary(xco))
-                //    continue;
-                   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
-                b[xco] += coeff.second * value;
-                //value += coeff.second * x.get(xco);
-            }
+                    continue;
+                //   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
+                x[xco] += (coeff.second / sum) * value;
+             }
         }
     }
 
-    err_return = 0;
-    err_b = 0;
+    //    err_return = 0;
+    //    err_b = 0;
     // Up
-    for (level_t level = 0; level <= x.getHighestLevel(); level++) {
-        data_t level_norm = 1;
-        int iter = 0;
-        while (level_norm > 1e-10) {
-        	// Up propagation of x
-			for (auto it = x.begin(false, level); it != x.end(); ++it) {
-				const coord_t &coord = (*it).first;
-				DTYPE &value = (*it).second;
-				auto coeffs = hcs.getCoeffs(coord);
-				//x.correct_neumann(&coeffs[0]);
-				value = 0;
-				for (auto coeff : coeffs) {
-					coord_t xco = coeff.first;
-					if (hcs.IsBoundary(xco))
-					   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
-					value += coeff.second * x.get(xco) + coeff.second * b.get(xco) + coeff.second * err_b.get(xco);
-				}
-			}
-	        // Calc error on level
-	        //level_norm = poisson_err<dimensions>(err_return, x, b, level);
-	        //cout << "Level " << level << " Iteration " << iter++ << " Norm " << level_norm << endl;
+    for (level_t level = 2; level <= x.getHighestLevel(); level++) {
+		// Up propagation of x
+		for (auto it = x.begin(false, level); it != x.end(); ++it) {
+			const coord_t &coord = (*it).first;
+			data_t &value = (*it).second;
+			auto coeffs = hcs.getCoeffs(coord);
+			//value = 0;
+            data_t sum = 0;
+            for (auto coeff : coeffs)
+                sum += coeff.second;
+			for (auto coeff : coeffs) {
+				coord_t xco = coeff.first;
+				if (hcs.IsBoundary(xco)) {
+					continue;
+					//coord_t origin = hcs.removeBoundary(xco);
+					//value += (coeff.second / sum) * -x.get(origin);
 
-	        // Correct error
-			for (auto it = x.begin(false, level); it != x.end(); ++it) {
-				const coord_t &coord = (*it).first;
-				(*it).second -= err_return[coord];
+							//xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
+				} else
+					value += (coeff.second / sum) * x.get(xco);
 			}
-	        level_norm = poisson_err<dimensions>(err_return, x, b, level);
+		}
+	}
 
-	        // Propagate error down one level
-	        for (auto it = err_return.begin(false, level); it != x.end(); ++it) {
-	            const coord_t &coord = (*it).first;
-	            DTYPE &value = (*it).second;
-	            auto coeffs = hcs.getCoeffs(coord);
-	            //b.correct_neumann(&coeffs[0]);
-	            //value = 0;
-	            for (auto coeff : coeffs) {
-	                coord_t xco = coeff.first;
-	                if (hcs.IsBoundary(xco))
-	                    continue;
-	                //   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
-	                err_b[xco] -= coeff.second * value;
-	                //value += coeff.second * x.get(xco);
-	            }
-	        }
-	        if (iter > 30)
-	        	exit(1);
-        }
-    }
     cout << "CENTER: " << x[1] << endl;
 }
 
@@ -129,28 +109,7 @@ void laplace(Field<DTYPE, HCS<dimensions> > &x) {
     HCS<dimensions> hcs = x.hcs;
     DenseField<DTYPE, HCS<dimensions> > b(x.getHighestLevel());
     b = 0.;
-
-/*
-    x[1]=0.25;
-    for (level_t level = 1; level <= x.getHighestLevel(); level++) {
-        for op(auto it = x.begin(false, level); it != x.end(); ++it) {
-            const coord_t &coord = (*it).first;
-            DTYPE &value = (*it).second;
-            auto coeffs = hcs.getCoeffs2(coord);
-            //x.correct_neumann(&coeffs[0]);
-            value = 0;
-            for (auto coeff : coeffs) {
-                coord_t xco = coeff.first;
-                //if (hcs.IsBoundary(xco))
-                //   xco = (xco & ~(coord_t)0xFFFFFFFF) | coord;
-                value += coeff.second * x.get(xco);
-            }
-        }
-    }
-    cout << "CENTER: " << x[1] << endl;
-    */
-    poisson<DTYPE, dimensions>(x, b);
-
+    //poisson<DTYPE, dimensions>(x, b);
 }
 
 
@@ -165,33 +124,35 @@ int main(int argc, char **argv) {
 	b.boundary[0] = x.boundary[0] = [](ScalarField2 *self, coord_t cc)->data_t { return 0;};
 	b.boundary[1] = x.boundary[1] = [](ScalarField2 *self, coord_t cc)->data_t { return 0;};
 	b.boundary[2] = x.boundary[2] = [](ScalarField2 *self, coord_t cc)->data_t { return 0;};
-	b.boundary[3] = x.boundary[3] = [](ScalarField2 *self, coord_t cc)->data_t { return 1;};
+	b.boundary[3] = x.boundary[3] = [](ScalarField2 *self, coord_t cc)->data_t { return 0;};
 
 	coord_t c = h.createFromList({0,0});
 	auto cc = h.getCoeffs(c);
 	for (auto e : cc) {
 		cout << h.toString(e.first) << " W: " << e.second << endl;
 	}
-//exit(1);
-    // Laplace test
+
+	// Laplace test
 	laplace<data_t, 2>(x);
 
     // Poisson test
 
 	b = 0;
+    b[h.createFromUnscaled(9, {256, 256})] = 1;//(512 *512);
+    b[h.createFromUnscaled(9, {255, 255})] = 1;//(512 *512);
+    b[h.createFromUnscaled(9, {256, 255})] = 1;//(512 *512);
+    b[h.createFromUnscaled(9, {255, 256})] = 1;//(512 *512);
+    poisson2(x, b);
 
-    //b[h.createFromUnscaled(9, {256, 256})] = (512 *512);
-    //poisson<data_t, 2>(x, b);
-
-
-
-	poisson_err<2>(err, x, b, max_level);
-    write_raw2("test9.raw", x);
-
+	//poisson_err<2>(err, x, b, max_level);
+	x.write("test9.raw");
 	write_pgm("test9.pgm", x, max_level);
 
-    write_pgm("test9_err.pgm", err, max_level);
-    write_raw2("test9_err.raw", err);
+	DenseVectorField2 grad_x;
+	grad<2>(x, grad_x);
+	div<2>(grad_x, x);
+	x.write("test9_err.raw");
+
 
 
 }
