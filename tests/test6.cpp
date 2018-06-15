@@ -41,13 +41,14 @@ int main(int argc, char **argv) {
 
 	x = 0;
 	SparseScalarField2 b = x;
-	//b = 1;
+	b = 1;
+	/*
 	b = 0;
     b[h2.createFromUnscaled(9, {256, 256})] = 1;//(512 *512);
     b[h2.createFromUnscaled(9, {255, 255})] = 1;//(512 *512);
     b[h2.createFromUnscaled(9, {256, 255})] = 1;//(512 *512);
     b[h2.createFromUnscaled(9, {255, 256})] = 1;//(512 *512);
-
+	 */
 	// Turns the right-side boundary value to 1
 
 	x.boundary[0] = [](ScalarField2 *self, coord_t c)->data_t {
