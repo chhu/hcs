@@ -57,5 +57,5 @@ The `Field()` class provides a sparse storage object for arbitrary data types. T
 _Look at the tests on how to use these features!_
 
 ## Goal of this project
-The way the interpolation works enables finite-difference / -volume methods to use mesh-refinement, with the ultimate goal to build a CFD Multi-Grid solver with adaptive mesh refinement. Some day...
+This is my toolbox to experiment in a recursive, N-dimenional world. The tests show a bit more what I am experimenting on. Performance is always an issue, and hopefully this work will inspire finite-difference / -volume methods to use mesh-refinement, with the ultimate goal to build a CFD Multi-Grid solver with adaptive mesh refinement. Some day...
 
