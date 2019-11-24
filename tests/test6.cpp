@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 	const int max_level = 9;
 	SparseScalarField2 x(max_level);
 
-	cout << "Solving Poisson equation Nabla^2(x) = 1 with zero Dirichlet boundary condition in 1D.\n";
+	cout << "Solving Poisson equation Nabla^2(x) = 1 with zero Dirichlet boundary condition in 2D 512x512.\n";
 
 	Solver<data_t, SparseScalarField2> solver;
 	Matrix<data_t, SparseScalarField2> M;
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 		return 0;	// Dirichlet to 1
 	};
 	x.boundary_propagate[0] = false; // propagation must be disabled for Dirichlet != 0 or solver will fail. For Neumann, propagation must stay enabled.
-
-	cout << "Finished. Iterations: " << solver.solve(M, x, b, 10000, 1e-5, 1e-20) << "\n";
+	unsigned iter = solver.solve(M, x, b, 10000, 1e-5, 1e-20);
+	cout << "Finished. Iterations: " << iter << "\n";
 	x.write("test6.raw");
 }

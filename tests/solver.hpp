@@ -173,7 +173,7 @@ public:
 				printf(" iter  %d: res = %g\n", iter, T(norm_r / norm_b));
 			} else if (debug > 1) {
 				if ((iter % 100) == 0) {
-					printf("Iteration %d: res = %g t = %g sec\n", iter, T(norm_r / norm_b), T(end_t - start_t));
+					printf("Iteration %d: res = %g \n", iter, T(norm_r / norm_b));
 				}
 			}
 			iter++;

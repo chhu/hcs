@@ -130,16 +130,6 @@ public:
                 else
                     weight *= ((i >> j) & 1) ? 0.25 : 0.75;
             weights_lookup[i] = weight;
-
-		    /* INV DIST weighting with p=1
-		    data_t weight = 0;
-            for (uint32_t j = 0; j < dimensions; j++)
-                if (boundary_part[j])
-                    weight = 0.25;
-                else
-                    weight += ((i >> j) & 1) ? 0.75*0.75 : 0.25*0.25;
-            weights_lookup[i] = 1./(sqrt(weight));
-            */
     	}
 
 	}
@@ -245,6 +235,18 @@ public:
 #endif
 	}
 
+	// Return the amount of neighbors for c that are boundaries or normal. The total amount of neighbors per coord is always 2 * dim
+	unsigned getNeighborCount(coord_t c, bool count_boundaries) {
+		unsigned direction = 2 * dimensions;
+		unsigned result = 0;
+		while (direction--) {
+			coord_t nc = getNeighbor(c, direction);
+			bool is_boundary = IsBoundary(nc);
+			result += int(!is_boundary ^ count_boundaries);
+		}
+		return result;
+	}
+
 	// Returns a normal vector for the provided direction
 	pos_t getDirectionNormal(uint8_t direction) {
 		pos_t result {0}; // all zero
@@ -252,7 +254,18 @@ public:
 		return result;
 	}
 
-	data_t getDistance(coord_t coord, uint8_t direction) {
+	// Euclidian distance
+	data_t getDistance(coord_t c1, coord_t c2) {
+		pos_t p1 = getPosition(c1);
+		pos_t p2 = getPosition(c2);
+		data_t result = 0;
+		for (uint8_t dim = 0; dim < dimensions; dim++)
+			result += pow(p2[dim] - p1[dim], 2);
+		return sqrt(result);
+	}
+
+	// How far is the next neighbor in a certain direction (spacing)
+	data_t getNeighborDistance(coord_t coord, uint8_t direction) {
 		return (2 * scales[direction]) / data_t(1U << GetLevel(coord));
 	}
 
@@ -333,7 +346,7 @@ public:
 		unscaled_t unscaled = getUnscaled(coord);
 		level_t level = GetLevel(coord);
 		data_t scale_divisor = 1./ data_t(1 << level);
-		for (uint8_t dim = 0; dim < dimensions; dim++)
+		for (int dim = 0; dim < dimensions; dim++)
 			result[dim] = scales[dim] * ((data_t)unscaled[dim] * scale_divisor * 2 + scale_divisor) - center[dim] + scales[dim];
 	}
 
@@ -683,7 +696,7 @@ public:
 	}
 
 	// Turns c into a linear-index that includes the level. Linear coords are great for storage but otherwise tedious to handle.
-	// HCS coords are linear within a level but have gaps between the levels.
+	// HCS coords are linear within a level but have gaps between the levels. This routine removes that gap.
 	size_t coord2index(coord_t c) {
 		level_t l = RemoveLevel(c);
 #ifdef __BMI2__

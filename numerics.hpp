@@ -30,38 +30,54 @@ typedef Field<data_t, H2> ScalarField2;
 typedef Field<data_t, H3> ScalarField3;
 typedef Field<data_t, H4> ScalarField4;
 typedef Field<data_t, H5> ScalarField5;
+template <unsigned dimensions> using ScalarField = Field<data_t, HCS<dimensions> >;
+
 
 typedef Field<data_t, H1> VectorField1; // 1D scalar field type
 typedef Field<Vec2, H2> VectorField2;
 typedef Field<Vec3, H3> VectorField3;
 typedef Field<Vec4, H4> VectorField4;
 typedef Field<Vec5, H5> VectorField5;
+template <unsigned dimensions> using VectorField = Field<Tensor1<data_t, dimensions>, HCS<dimensions> >;
 
 typedef DenseField<data_t, H1> DenseScalarField1; // 1D scalar field type
 typedef DenseField<data_t, H2> DenseScalarField2;
 typedef DenseField<data_t, H3> DenseScalarField3;
 typedef DenseField<data_t, H4> DenseScalarField4;
 typedef DenseField<data_t, H5> DenseScalarField5;
+template <unsigned dimensions> using DenseScalarField = DenseField<data_t, HCS<dimensions> >;
 
 typedef DenseField<data_t, H1> DenseVectorField1; // 1D Vector field type
 typedef DenseField<Vec2, H2> DenseVectorField2;
 typedef DenseField<Vec3, H3> DenseVectorField3;
 typedef DenseField<Vec4, H4> DenseVectorField4;
 typedef DenseField<Vec5, H5> DenseVectorField5;
+template <unsigned dimensions> using DenseVectorField = DenseField<Tensor1<data_t, dimensions>, HCS<dimensions> >;
 
 typedef SparseField<data_t, H1> SparseScalarField1; // 1D scalar field type
 typedef SparseField<data_t, H2> SparseScalarField2;
 typedef SparseField<data_t, H3> SparseScalarField3;
 typedef SparseField<data_t, H4> SparseScalarField4;
 typedef SparseField<data_t, H5> SparseScalarField5;
+template <unsigned dimensions> using SparseScalarField = SparseField<data_t, HCS<dimensions> >;
+
 
 typedef SparseField<data_t, H1> SparseVectorField1; // 1D Vector field type
 typedef SparseField<Vec2, H2> SparseVectorField2;
 typedef SparseField<Vec3, H3> SparseVectorField3;
 typedef SparseField<Vec4, H4> SparseVectorField4;
 typedef SparseField<Vec5, H5> SparseVectorField5;
+template <unsigned dimensions> using SparseVectorField = SparseField<Tensor1<data_t, dimensions>, HCS<dimensions> >;
 
 
+// Turn 2 HCS coords into a vector containing pos(a)-pos(b)
+// HCS must be provided as it may contain non-default scaling info
+template <unsigned dimensions>
+Tensor1<data_t, dimensions> c2v(HCS<dimensions> &hcs, coord_t a, coord_t b) {
+	Tensor1<data_t, dimensions> pos_a(hcs.getPosition(a));
+	Tensor1<data_t, dimensions> pos_b(hcs.getPosition(b));
+	return pos_a - pos_b;
+}
 
 
 // Dimension-independent gradient operator
@@ -91,7 +107,7 @@ void grad(Field<data_t, HCS<dimension> > &source, Field<Tensor1<data_t, dimensio
 		}
 		return gradient;
 	});
-	result.propagate();
+	//result.propagate();
 }
 
 // Dimension-independent divergence operator
@@ -104,7 +120,6 @@ void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data
 	typedef Field<data_t, HX> ScalarField;
     typedef Field<Vec, HX> VectorField;
 
-    cout << "SC\n";
     result.createEntireLevel(source.getHighestLevel());
 	// strange calling convention because template depends now on another template
 	result.template convert<Vec>(source, [](coord_t c, VectorField &source)->data_t {
@@ -122,7 +137,7 @@ void div(Field<Tensor1<data_t, dimension>, HCS<dimension> >  &source, Field<data
 		}
 		return divergence;
 	});
-	result.propagate();
+	//result.propagate();
 }
 
 

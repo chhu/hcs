@@ -185,9 +185,22 @@ public:
     // Do coordinates exist in a higher level?
     virtual bool isTop(coord_t coord) = 0;	// Average all non-top coords from top-level
 
-    // Propagates values down from top-level to lowest level by averaging them.
+    // Propagates values down from top-level to lowest level by averaging them. The center coord will
+    // hold the average value of that field.
+    // Overwrites all values except top-level.
     // If there would be a reverse iterator, a generic algorithm would be possible here...
     virtual void propagate() = 0;
+
+    // Works like propagate but also subtracts the averaged value.
+    // Suppose you have a field with all ones on top-level, then after pack() all values will be zero
+    // except lowest level center coord which would be one. Useful for many compression algos, therefore
+    // called pack().
+    // Modifies >all< values.
+    virtual void pack() = 0;
+
+    // The opposite of pack. Propagates from bottom up. Restores top-level values as they were when called
+    // pack().
+    virtual void unpack() = 0;
 
     // Return interpolation coeffs and their associated >existing< coords.
     // The first value of the pair is the coefficient, always >0 and <=1.

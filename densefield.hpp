@@ -207,25 +207,67 @@ public:
     }
 
 
-    // Average all non-top coords from top-level
-    void propagate() {
+     // Average all non-top coords from top-level
+     void propagate() {
 
-        uint32_t parts = hcs.parts;
-        data_t inv_parts = 1. / data_t(parts);
-        size_t idx = data.size() - 1;
-        coord_t c = hcs.index2coord(idx);
-        c -= c % parts;
-        idx -= idx % parts;
+         uint32_t parts = hcs.parts;
+         data_t inv_parts = 1. / data_t(parts);
+         size_t idx = data.size() - 1;
+         coord_t c = hcs.index2coord(idx);
+         c -= c % parts;
+         idx = hcs.coord2index(c);
+         while (c > parts) {
+             DTYPE sum = 0;
+             for (size_t j = idx; j < idx + parts; j++)
+                 sum += data[j];
+             sum *= inv_parts;
+             data[hcs.coord2index(hcs.ReduceLevel(c))] += sum;
+             hcs.decParts(c);
+             idx -= parts;
+         }
+     }
 
-        while (c > parts) {
-            DTYPE sum = 0;
-            for (size_t j = idx; j < idx + parts; j++)
-                sum += data[j];
-            sum *= inv_parts;
-            data[hcs.coord2index(hcs.ReduceLevel(c))] = sum;
-            hcs.decParts(c);
-            idx -= parts;
-        }
+     // Average all non-top coords from top-level and subtract
+     void pack() {
+
+          uint32_t parts = hcs.parts;
+          data_t inv_parts = 1. / data_t(parts);
+          size_t idx = data.size() - 1;
+          coord_t c = hcs.index2coord(idx);
+          c -= c % parts;
+          idx = hcs.coord2index(c);
+          while (c > parts) {
+              DTYPE sum = 0;
+              for (size_t j = idx; j < idx + parts; j++)
+                  sum += data[j];
+              sum *= inv_parts;
+              for (size_t j = idx; j < idx + parts; j++)
+                  data[j] -= sum / 2.;
+              data[hcs.coord2index(hcs.ReduceLevel(c))] += sum / 2.;
+              hcs.decParts(c);
+              idx -= parts;
+          }
+    }
+
+     // Opposite of pack
+     void unpack() {
+
+          uint32_t parts = hcs.parts;
+          data_t inv_parts = 1. / data_t(parts);
+          size_t idx = 0;
+          coord_t c = 1;
+          while (idx < data.size() - parts) {
+              DTYPE sum = data[idx];
+
+              for (size_t j = idx; j < idx + parts; j++)
+                  sum += data[j];
+              sum *= inv_parts;
+              for (size_t j = idx; j < idx + parts; j++)
+                  data[j] -= sum;
+              data[hcs.coord2index(hcs.ReduceLevel(c))] += sum;
+              hcs.decParts(c);
+              idx -= parts;
+          }
     }
 
 
